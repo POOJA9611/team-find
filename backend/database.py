@@ -44,7 +44,22 @@ class Database:
             self._connect_sqlite()
             return
 
-        # Try MySQL first
+        # Fast socket probe: check if MySQL port is accessible in under 300ms
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.3)
+            port_status = sock.connect_ex((MYSQL_HOST, MYSQL_PORT))
+            sock.close()
+            if port_status != 0:
+                print(f"ℹ️ MySQL not active on {MYSQL_HOST}:{MYSQL_PORT}. Instantly activating local SQLite.")
+                self.mode = "sqlite"
+                self._connect_sqlite()
+                return
+        except Exception:
+            pass
+
+        # Try MySQL connection
         try:
             # First connect without database in case database needs to be created
             tmp_conn = pymysql.connect(

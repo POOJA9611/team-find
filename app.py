@@ -99,6 +99,9 @@ def server_error(e):
 PORT = int(os.getenv("PORT", 5000))
 
 if __name__ == "__main__":
+    import threading
+    import webbrowser
+
     print(f"🚀 Initializing College Portal Database...")
     initialize_database()
     
@@ -109,6 +112,20 @@ if __name__ == "__main__":
     except Exception as seed_err:
         print(f"ℹ️ Seed check note: {seed_err}")
 
-    print(f"🚀 College Portal Backend running on http://localhost:{PORT}")
-    print(f"📡 Socket.IO listening for real-time events")
+    print("\n" + "=" * 70)
+    print("  🎓 ACADEMIC PORTAL (Flask + MySQL/SQLite) IS NOW LIVE!")
+    print(f"  🌐 Access in Browser : http://localhost:{PORT}")
+    print("  🔑 Demo Logins       : hod.cs@college.edu | dr.jenkins@college.edu")
+    print("  🛑 To Stop Server    : Press Ctrl + C in this terminal")
+    print("=" * 70 + "\n")
+
+    # Automatically launch default browser after 1 second
+    def _launch_browser():
+        try:
+            webbrowser.open(f"http://localhost:{PORT}")
+        except Exception:
+            pass
+
+    threading.Timer(1.0, _launch_browser).start()
+
     socketio.run(app, host="0.0.0.0", port=PORT, debug=False, allow_unsafe_werkzeug=True)
