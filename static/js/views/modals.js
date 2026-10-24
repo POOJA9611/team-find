@@ -158,3 +158,5 @@ export async function openFacultyModal(facultyId) {
     card.querySelector('.modal-body-content').innerHTML = `<div class="p-4 text-center text-danger">${err.message || 'Failed to load details.'}</div>`;
   }
 }
+
+export const openFacultyDetailModal = openFacultyModal;

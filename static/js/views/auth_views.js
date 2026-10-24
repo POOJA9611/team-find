@@ -417,3 +417,6 @@ export function renderSignup(container, { onGoToLogin }) {
 
   renderForm();
 }
+
+export const renderLoginView = renderLogin;
+export const renderSignupView = renderSignup;

@@ -11,6 +11,23 @@ class AuthService {
     this.token = localStorage.getItem('token') || null;
     this.loading = true;
     this.listeners = [];
+    this.subscribers = [];
+  }
+
+  getUser() {
+    return this.user;
+  }
+
+  getToken() {
+    return this.token;
+  }
+
+  getProfile() {
+    return this.profile;
+  }
+
+  isLoading() {
+    return this.loading;
   }
 
   onChange(callback) {
@@ -20,14 +37,45 @@ class AuthService {
     };
   }
 
+  subscribe(callback) {
+    this.subscribers.push(callback);
+    // If not loading, call immediately with current state
+    if (!this.loading) {
+      try {
+        callback(this.user);
+      } catch (err) {
+        console.error('Auth subscriber initial callback error:', err);
+      }
+    }
+    return () => {
+      this.subscribers = this.subscribers.filter((cb) => cb !== callback);
+    };
+  }
+
   notify() {
-    this.listeners.forEach((cb) => cb({
+    const payload = {
       user: this.user,
       profile: this.profile,
       token: this.token,
       loading: this.loading,
       isAuthenticated: !!this.user
-    }));
+    };
+
+    this.listeners.forEach((cb) => {
+      try {
+        cb(payload);
+      } catch (err) {
+        console.error('Auth onChange error:', err);
+      }
+    });
+
+    this.subscribers.forEach((cb) => {
+      try {
+        cb(this.user);
+      } catch (err) {
+        console.error('Auth subscriber error:', err);
+      }
+    });
   }
 
   async init() {
@@ -99,8 +147,8 @@ class AuthService {
   async switchDemoAccount(role) {
     const credentials = {
       hod: { email: 'hod.cs@college.edu', password: 'HodPass@2026' },
-      faculty: { email: 'sarah.jenkins@college.edu', password: 'Password@123' },
-      student: { email: 'alex.chen@student.edu', password: 'Password@123' }
+      faculty: { email: 'dr.jenkins@college.edu', password: 'password123' },
+      student: { email: 'alex.chen@student.edu', password: 'password123' }
     };
     const cred = credentials[role];
     if (cred) {
@@ -110,4 +158,5 @@ class AuthService {
 }
 
 export const auth = new AuthService();
+export const authState = auth;
 export default auth;

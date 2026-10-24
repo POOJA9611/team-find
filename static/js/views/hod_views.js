@@ -1258,3 +1258,5 @@ export function renderHodPostNotification(container, { navigate }) {
     }
   });
 }
+
+export const renderHodProjectTeamRequests = renderHodTeamRequests;

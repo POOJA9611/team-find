@@ -13,56 +13,68 @@ async function bootstrapApp() {
   const authContainer = document.getElementById('auth-container');
   const portalShell = document.getElementById('portal-shell');
 
-  // Register Auth Listener
-  authState.subscribe(async (user) => {
-    if (!user) {
-      // Disconnect socket if connected
-      socketManager.disconnect();
+  try {
+    // Register Auth Listener
+    authState.subscribe(async (user) => {
+      try {
+        if (!user) {
+          // Disconnect socket if connected
+          socketManager.disconnect();
 
-      // Show unauthenticated screen
-      portalShell.style.display = 'none';
-      authContainer.style.display = 'block';
-      renderAuthScreen();
-    } else {
-      // Show authenticated portal shell
-      authContainer.style.display = 'none';
-      portalShell.style.display = 'flex';
+          // Show unauthenticated screen
+          portalShell.style.display = 'none';
+          authContainer.style.display = 'block';
+          renderAuthScreen();
+        } else {
+          // Show authenticated portal shell
+          authContainer.style.display = 'none';
+          portalShell.style.display = 'flex';
 
-      // Update User Profile In UI
-      updateUserUI(user);
+          // Update User Profile In UI
+          updateUserUI(user);
 
-      // Connect Socket.IO
-      socketManager.connect(authState.getToken());
+          // Connect Socket.IO
+          socketManager.connect(authState.getToken());
 
-      // Setup Socket notification toast callback
-      socketManager.onNotification((notif) => {
-        socketManager.showNotificationToast(notif);
-        fetchTopbarNotifications();
-      });
+          // Setup Socket notification toast callback
+          socketManager.onNotification((notif) => {
+            socketManager.showNotificationToast(notif);
+            fetchTopbarNotifications();
+          });
 
-      // Render Sidebar & navigate to default view
-      router.init();
+          // Render Sidebar & navigate to default view
+          router.init();
 
-      // Fetch Topbar notifications
+          // Fetch Topbar notifications
+          fetchTopbarNotifications();
+        }
+      } catch (authErr) {
+        console.error('Auth state transition error:', authErr);
+      } finally {
+        // Always hide initial loading screen
+        if (loadingScreen) {
+          loadingScreen.style.display = 'none';
+        }
+      }
+    });
+
+    // Setup Global Topbar Controls
+    setupTopbarInteractions();
+
+    // Listen for custom notifications updated event from pages
+    window.addEventListener('notifications-updated', () => {
       fetchTopbarNotifications();
-    }
+    });
 
-    // Hide initial loading screen
+    // Initialize auth state (checks localStorage and validates token)
+    await authState.init();
+  } catch (err) {
+    console.error('Fatal bootstrap error:', err);
+  } finally {
     if (loadingScreen) {
       loadingScreen.style.display = 'none';
     }
-  });
-
-  // Setup Global Topbar Controls
-  setupTopbarInteractions();
-
-  // Listen for custom notifications updated event from pages
-  window.addEventListener('notifications-updated', () => {
-    fetchTopbarNotifications();
-  });
-
-  // Initialize auth state (checks localStorage and validates token)
-  await authState.init();
+  }
 }
 
 function renderAuthScreen() {

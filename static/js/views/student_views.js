@@ -1346,3 +1346,6 @@ export async function renderStudentChangeRequest(container, { navigate, onOpenFa
     container.innerHTML = `<div class="p-8 text-center text-danger">${err.message || 'Failed to load change requests.'}</div>`;
   }
 }
+
+export const renderStudentProjectTeams = renderStudentTeams;
+export const renderStudentFacultyDirectory = renderFacultyDirectory;

@@ -52,6 +52,7 @@ class Database:
                 port=MYSQL_PORT,
                 user=MYSQL_USER,
                 password=MYSQL_PASSWORD,
+                connect_timeout=1,
                 cursorclass=DictCursor,
                 autocommit=True
             )
@@ -66,6 +67,7 @@ class Database:
                 user=MYSQL_USER,
                 password=MYSQL_PASSWORD,
                 database=MYSQL_DATABASE,
+                connect_timeout=1,
                 cursorclass=DictCursor,
                 autocommit=True
             )

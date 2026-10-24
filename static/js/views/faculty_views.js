@@ -584,3 +584,5 @@ export async function renderFacultyProfile(container, { navigate }) {
     container.innerHTML = `<div class="p-8 text-center text-danger">${err.message || 'Failed to load profile.'}</div>`;
   }
 }
+
+export const renderFacultyMyStudents = renderMyStudents;

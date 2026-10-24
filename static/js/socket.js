@@ -86,6 +86,24 @@ class SocketManager {
     this.isConnected = false;
   }
 
+  getSocket() {
+    return this.socket;
+  }
+
+  isConnected() {
+    return !!this.isConnected;
+  }
+
+  onNotification(callback) {
+    if (this.socket) {
+      this.socket.on('new_notification', callback);
+    }
+  }
+
+  showNotificationToast(notif) {
+    return this.showToastNotification(notif);
+  }
+
   onReceiveMessage(callback) {
     this.messageListeners.push(callback);
     return () => {
