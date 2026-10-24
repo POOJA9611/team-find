@@ -260,7 +260,50 @@
     <div id="modal-container"></div>
   </div>
 
+  <!-- Immediate Quick-Fill Helper Script -->
+  <script>
+    (function() {
+      function bindQuickDemo() {
+        var email = document.getElementById('login-email');
+        var pw = document.getElementById('login-password');
+        var err = document.getElementById('login-error-alert');
+
+        var bHod = document.getElementById('btn-fill-hod');
+        var bFac = document.getElementById('btn-fill-fac');
+        var bStd = document.getElementById('btn-fill-std');
+
+        if (bHod) {
+          bHod.onclick = function() {
+            if (email) email.value = 'hod.cs@college.edu';
+            if (pw) pw.value = 'HodPass@2026';
+            if (err) err.style.display = 'none';
+          };
+        }
+        if (bFac) {
+          bFac.onclick = function() {
+            if (email) email.value = 'sarah.jenkins@college.edu';
+            if (pw) pw.value = 'Password@123';
+            if (err) err.style.display = 'none';
+          };
+        }
+        if (bStd) {
+          bStd.onclick = function() {
+            if (email) email.value = 'alex.chen@student.edu';
+            if (pw) pw.value = 'Password@123';
+            if (err) err.style.display = 'none';
+          };
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindQuickDemo);
+      } else {
+        bindQuickDemo();
+      }
+    })();
+  </script>
+
   <!-- Vanilla JavaScript Application Modules with Cache Buster -->
-  <script type="module" src="/static/js/app.js?v=20261024_2"></script>
+  <script type="module" src="/static/js/app.js?v=20261024_3"></script>
 </body>
 </html>

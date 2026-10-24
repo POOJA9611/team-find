@@ -339,5 +339,9 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Start application when DOM is ready
-document.addEventListener('DOMContentLoaded', bootstrapApp);
+// Start application immediately if DOM is already ready, or on DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+  bootstrapApp();
+}
