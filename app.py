@@ -101,6 +101,14 @@ PORT = int(os.getenv("PORT", 5000))
 if __name__ == "__main__":
     print(f"🚀 Initializing College Portal Database...")
     initialize_database()
+    
+    # Auto-seed initial demo accounts and HOD if not already seeded
+    try:
+        from backend.demo_seed import seed_demo_data
+        seed_demo_data()
+    except Exception as seed_err:
+        print(f"ℹ️ Seed check note: {seed_err}")
+
     print(f"🚀 College Portal Backend running on http://localhost:{PORT}")
     print(f"📡 Socket.IO listening for real-time events")
     socketio.run(app, host="0.0.0.0", port=PORT, debug=False, allow_unsafe_werkzeug=True)
