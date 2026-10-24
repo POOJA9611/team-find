@@ -14,8 +14,8 @@
   <!-- Font Awesome 6 Icons via CDN (SRI removed for universal compatibility) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- Socket.IO Client CDN -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Socket.IO Client (Served locally for instant loading with zero CDN timeouts) -->
+  <script src="/static/js/vendor/socket.io.min.js"></script>
 
   <!-- Application Stylesheets (Original modular CSS preserved) -->
   <link rel="stylesheet" href="/static/css/style.css?v=2" />
@@ -45,7 +45,7 @@
             <span id="login-error-text"></span>
           </div>
 
-          <form id="login-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 16px;">
+          <form id="login-form" style="display: flex; flex-direction: column; gap: 16px;">
             <div>
               <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
                 Email Address

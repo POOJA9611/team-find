@@ -942,13 +942,12 @@ export async function renderHodTeamRequests(container, { navigate }) {
         });
       });
 
-    };
+    } catch (err) {
+      container.innerHTML = `<div class="p-8 text-center text-danger">${err.message || 'Failed to load proposals.'}</div>`;
+    }
+  };
 
-    loadProposals();
-
-  } catch (err) {
-    container.innerHTML = `<div class="p-8 text-center text-danger">${err.message || 'Failed to load proposals.'}</div>`;
-  }
+  loadProposals();
 }
 
 
