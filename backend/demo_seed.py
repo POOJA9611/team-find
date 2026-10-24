@@ -1,6 +1,12 @@
 import os
 import sys
 
+# Ensure project root is in sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -326,6 +332,8 @@ def seed_demo_data():
 
     print("\n🎉 Demo Data Seeding Completed Successfully!")
 
+
+seed_all = seed_demo_data
 
 if __name__ == "__main__":
     seed_demo_data()
