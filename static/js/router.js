@@ -118,33 +118,40 @@ class Router {
     const onNavigate = (view, params) => this.navigate(view, params);
     const onNavigateToChat = (groupId) => this.navigateToChat(groupId);
     const onOpenFacultyModal = (facultyId) => openFacultyDetailModal(facultyId);
+    const viewCtx = {
+      navigate: onNavigate,
+      onNavigate,
+      onNavigateToChat,
+      onOpenFacultyModal,
+      viewParams: this.viewParams
+    };
 
     // HOD Views
     if (user.role === 'hod') {
       switch (this.activeView) {
         case 'dashboard':
-          renderHodDashboard(container, { onNavigate });
+          renderHodDashboard(container, viewCtx);
           break;
         case 'assignments':
-          renderHodAssignments(container);
+          renderHodAssignments(container, viewCtx);
           break;
         case 'change-requests':
-          renderHodChangeRequests(container);
+          renderHodChangeRequests(container, viewCtx);
           break;
         case 'hod-team-requests':
-          renderHodProjectTeamRequests(container);
+          renderHodProjectTeamRequests(container, viewCtx);
           break;
         case 'directory':
-          renderHodDirectory(container);
+          renderHodDirectory(container, viewCtx);
           break;
         case 'post-notification':
-          renderHodPostNotification(container);
+          renderHodPostNotification(container, viewCtx);
           break;
         case 'notifications':
-          renderNotificationsView(container);
+          renderNotificationsView(container, viewCtx);
           break;
         default:
-          renderHodDashboard(container, { onNavigate });
+          renderHodDashboard(container, viewCtx);
           break;
       }
       return;
@@ -154,13 +161,13 @@ class Router {
     if (user.role === 'faculty') {
       switch (this.activeView) {
         case 'dashboard':
-          renderFacultyDashboard(container, { onNavigate });
+          renderFacultyDashboard(container, viewCtx);
           break;
         case 'my-students':
-          renderFacultyMyStudents(container);
+          renderFacultyMyStudents(container, viewCtx);
           break;
         case 'faculty-teams':
-          renderFacultyTeams(container, { onNavigateToChat });
+          renderFacultyTeams(container, viewCtx);
           break;
         case 'faculty-chat':
           renderChatView(container, {
@@ -168,13 +175,13 @@ class Router {
           });
           break;
         case 'faculty-profile':
-          renderFacultyProfile(container);
+          renderFacultyProfile(container, viewCtx);
           break;
         case 'notifications':
-          renderNotificationsView(container);
+          renderNotificationsView(container, viewCtx);
           break;
         default:
-          renderFacultyDashboard(container, { onNavigate });
+          renderFacultyDashboard(container, viewCtx);
           break;
       }
       return;
@@ -184,17 +191,13 @@ class Router {
     if (user.role === 'student') {
       switch (this.activeView) {
         case 'dashboard':
-          renderStudentDashboard(container, { onNavigate, onOpenFacultyModal });
+          renderStudentDashboard(container, viewCtx);
           break;
         case 'student-profile':
-          renderStudentProfile(container);
+          renderStudentProfile(container, viewCtx);
           break;
         case 'project-teams':
-          renderStudentProjectTeams(container, {
-            onNavigate,
-            onOpenFacultyModal,
-            viewParams: this.viewParams
-          });
+          renderStudentProjectTeams(container, viewCtx);
           break;
         case 'student-chat':
           renderChatView(container, {
@@ -202,16 +205,16 @@ class Router {
           });
           break;
         case 'faculty-directory':
-          renderStudentFacultyDirectory(container);
+          renderStudentFacultyDirectory(container, viewCtx);
           break;
         case 'change-request':
-          renderStudentChangeRequest(container);
+          renderStudentChangeRequest(container, viewCtx);
           break;
         case 'notifications':
-          renderNotificationsView(container);
+          renderNotificationsView(container, viewCtx);
           break;
         default:
-          renderStudentDashboard(container, { onNavigate, onOpenFacultyModal });
+          renderStudentDashboard(container, viewCtx);
           break;
       }
       return;

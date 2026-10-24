@@ -11,26 +11,126 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Font Awesome 6 Icons via CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- Font Awesome 6 Icons via CDN (SRI removed for universal compatibility) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
   <!-- Socket.IO Client CDN -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- Application Stylesheets (Original modular CSS preserved) -->
-  <link rel="stylesheet" href="/static/css/style.css" />
-  <link rel="stylesheet" href="/static/css/components.css" />
-  <link rel="stylesheet" href="/static/css/responsive.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v=2" />
+  <link rel="stylesheet" href="/static/css/components.css?v=2" />
+  <link rel="stylesheet" href="/static/css/responsive.css?v=2" />
 </head>
 <body>
   <div id="app">
-    <!-- Loading Screen -->
-    <div id="loading-screen" style="height: 100vh; display: flex; align-items: center; justify-content: center; background-color: var(--bg-main);">
-      <i class="fa-solid fa-spinner fa-spin text-3xl text-indigo"></i>
-    </div>
+    <!-- Auth Container (Visible immediately by default - Zero Blank Screen) -->
+    <div id="auth-container">
+      <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 50%, #F7F8FC 100%); padding: 24px;">
+        <div class="card" style="width: 100%; max-width: 460px; padding: 36px; box-shadow: var(--shadow-modal); border-radius: 24px;">
+          <div style="text-align: center; margin-bottom: 28px;">
+            <div style="width: 64px; height: 64px; border-radius: 16px; background-color: var(--color-primary-light); color: var(--color-primary); display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 16px;">
+              <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <h2 style="font-size: 24px; font-weight: 800; color: var(--text-primary); margin: 0 0 6px 0;">
+              Academic Portal
+            </h2>
+            <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+              Project Guidance & Capstone Team Management
+            </p>
+          </div>
 
-    <!-- Auth Container (Unauthenticated) -->
-    <div id="auth-container" style="display: none;"></div>
+          <div id="login-error-alert" style="display: none; background-color: var(--color-danger-light); color: var(--color-danger); padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 20px; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="login-error-text"></span>
+          </div>
+
+          <form id="login-form" style="display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
+                Email Address
+              </label>
+              <div style="position: relative;">
+                <i class="fa-regular fa-envelope" style="position: absolute; left: 14px; top: 14px; color: var(--text-muted);"></i>
+                <input
+                  id="login-email"
+                  type="email"
+                  required
+                  placeholder="name@college.edu or name@student.edu"
+                  style="width: 100%; padding: 12px 14px 12px 40px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 14px; outline: none; transition: border-color 0.2s;"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
+                Password
+              </label>
+              <div style="position: relative;">
+                <i class="fa-solid fa-lock" style="position: absolute; left: 14px; top: 14px; color: var(--text-muted);"></i>
+                <input
+                  id="login-password"
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  style="width: 100%; padding: 12px 14px 12px 40px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 14px; outline: none;"
+                />
+              </div>
+            </div>
+
+            <button
+              id="btn-login-submit"
+              type="submit"
+              style="margin-top: 8px; background-color: var(--color-primary); color: #fff; padding: 13px; border-radius: 10px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25);"
+            >
+              <i class="fa-solid fa-arrow-right-to-bracket"></i>
+              <span>Sign In to Portal</span>
+            </button>
+          </form>
+
+          <!-- Quick Demo Logins Box -->
+          <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-light);">
+            <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; text-align: center;">
+              Quick 1-Click Demo Logins
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+              <button
+                id="btn-fill-hod"
+                type="button"
+                style="padding: 8px 6px; border-radius: 8px; border: 1px solid #E0E7FF; background-color: #EEF2FF; color: #4338CA; font-size: 11px; font-weight: 700; cursor: pointer;"
+              >
+                HOD (Admin)
+              </button>
+              <button
+                id="btn-fill-fac"
+                type="button"
+                style="padding: 8px 6px; border-radius: 8px; border: 1px solid #EDE9FE; background-color: #F5F3FF; color: #7C3AED; font-size: 11px; font-weight: 700; cursor: pointer;"
+              >
+                Faculty Mentor
+              </button>
+              <button
+                id="btn-fill-std"
+                type="button"
+                style="padding: 8px 6px; border-radius: 8px; border: 1px solid #DCFCE7; background-color: #F0FDF4; color: #16A34A; font-size: 11px; font-weight: 700; cursor: pointer;"
+              >
+                Student
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top: 24px; text-align: center; font-size: 13px; color: var(--text-secondary);">
+            New student or faculty?
+            <button
+              id="link-go-to-signup"
+              type="button"
+              style="color: var(--color-primary); font-weight: 700; border: none; background: none; cursor: pointer;"
+            >
+              Create an Account
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Authenticated App Shell -->
     <div id="portal-shell" class="app-wrapper" style="display: none;">
@@ -131,7 +231,7 @@
             <div style="position: relative;">
               <div id="btn-topbar-profile" class="topbar-user-profile" style="cursor: pointer;">
                 <img id="topbar-user-avatar" src="" alt="Avatar" class="avatar avatar-sm current-user-avatar" />
-                <div class="line-tight text-left" style="display: flex; flexDirection: column;">
+                <div class="line-tight text-left" style="display: flex; flex-direction: column;">
                   <span id="topbar-user-name" class="text-xs font-bold block current-user-name"></span>
                   <span id="topbar-user-role" class="text-xs text-muted block current-user-role" style="text-transform: capitalize;"></span>
                 </div>
@@ -160,7 +260,7 @@
     <div id="modal-container"></div>
   </div>
 
-  <!-- Vanilla JavaScript Application Modules -->
-  <script type="module" src="/static/js/app.js"></script>
+  <!-- Vanilla JavaScript Application Modules with Cache Buster -->
+  <script type="module" src="/static/js/app.js?v=20261024_2"></script>
 </body>
 </html>

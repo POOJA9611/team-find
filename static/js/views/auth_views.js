@@ -5,7 +5,8 @@
 import auth from '../auth.js';
 
 export function renderLogin(container, { onGoToSignup }) {
-  container.innerHTML = `
+  if (!container.querySelector('#login-form')) {
+    container.innerHTML = `
     <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 50%, #F7F8FC 100%); padding: 24px;">
       <div class="card" style="width: 100%; max-width: 460px; padding: 36px; box-shadow: var(--shadow-modal); border-radius: 24px;">
         <div style="text-align: center; margin-bottom: 28px;">
@@ -99,7 +100,7 @@ export function renderLogin(container, { onGoToSignup }) {
         </div>
 
         <div style="margin-top: 24px; text-align: center; font-size: 13px; color: var(--text-secondary);">
-          New student or faculty?{' '}
+          New student or faculty?
           <button
             id="link-go-to-signup"
             type="button"
@@ -111,6 +112,7 @@ export function renderLogin(container, { onGoToSignup }) {
       </div>
     </div>
   `;
+  }
 
   const emailInput = container.querySelector('#login-email');
   const passwordInput = container.querySelector('#login-password');

@@ -31,6 +31,7 @@ app = Flask(
 
 app.config["SECRET_KEY"] = os.getenv("JWT_SECRET", "supersecret_college_portal_jwt_token_key_2026!")
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB upload limit
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 # CORS
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
@@ -40,12 +41,17 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 app.extensions["socketio"] = socketio
 setup_socket_events(socketio)
 
-# Security headers
+# Security & Cache Control headers
 @app.after_request
-def add_security_headers(response):
+def add_security_and_cache_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Never cache html or static assets in development
+    if request.path == "/" or request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 # Uploads directory
