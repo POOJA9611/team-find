@@ -34,6 +34,23 @@ def decode_token(token: str):
     return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
 
 
+def create_reset_token(user_id: int, email: str) -> str:
+    payload = {
+        "userId": user_id,
+        "email": email,
+        "purpose": "password_reset",
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=15)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def decode_reset_token(token: str) -> dict:
+    payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    if payload.get("purpose") != "password_reset":
+        raise ValueError("Invalid reset token purpose.")
+    return payload
+
+
 def authenticate_token(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):

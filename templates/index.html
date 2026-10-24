@@ -45,7 +45,7 @@
             <span id="login-error-text"></span>
           </div>
 
-          <form id="login-form" style="display: flex; flex-direction: column; gap: 16px;">
+          <form id="login-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 16px;">
             <div>
               <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
                 Email Address
@@ -63,9 +63,18 @@
             </div>
 
             <div>
-              <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
-                Password
-              </label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                  Password
+                </label>
+                <button
+                  id="link-go-to-forgot"
+                  type="button"
+                  style="background: none; border: none; padding: 0; font-size: 12px; font-weight: 600; color: var(--color-primary); cursor: pointer; text-decoration: underline;"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <div style="position: relative;">
                 <i class="fa-solid fa-lock" style="position: absolute; left: 14px; top: 14px; color: var(--text-muted);"></i>
                 <input
@@ -123,7 +132,7 @@
             <button
               id="link-go-to-signup"
               type="button"
-              style="color: var(--color-primary); font-weight: 700; border: none; background: none; cursor: pointer;"
+              style="color: var(--color-primary); font-weight: 700; border: none; background: none; cursor: pointer; text-decoration: underline; margin-left: 4px;"
             >
               Create an Account
             </button>

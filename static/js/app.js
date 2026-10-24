@@ -2,9 +2,15 @@ import api from './api.js';
 import { authState } from './auth.js';
 import { socketManager } from './socket.js';
 import { router } from './router.js';
-import { renderLoginView, renderSignupView } from './views/auth_views.js';
+import {
+  renderLoginView,
+  renderSignupView,
+  renderForgotPasswordView,
+  renderResetPasswordView
+} from './views/auth_views.js';
 
-let authScreenMode = 'login'; // 'login' or 'signup'
+let authScreenMode = 'login'; // 'login', 'signup', 'forgot', 'reset'
+let activeResetToken = '';
 let topbarNotifications = [];
 let topbarUnreadCount = 0;
 
@@ -66,6 +72,20 @@ async function bootstrapApp() {
       fetchTopbarNotifications();
     });
 
+    // Detect reset token or auth hash routes on initial load
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetTokenParam = urlParams.get('reset_token');
+    if (resetTokenParam) {
+      activeResetToken = resetTokenParam;
+      authScreenMode = 'reset';
+    } else if (window.location.hash === '#reset-password') {
+      authScreenMode = 'reset';
+    } else if (window.location.hash === '#forgot-password') {
+      authScreenMode = 'forgot';
+    } else if (window.location.hash === '#signup') {
+      authScreenMode = 'signup';
+    }
+
     // Initialize auth state (checks localStorage and validates token)
     await authState.init();
   } catch (err) {
@@ -86,9 +106,26 @@ function renderAuthScreen() {
       onGoToLogin: () => {
         authScreenMode = 'login';
         renderAuthScreen();
+      }
+    });
+  } else if (authScreenMode === 'forgot') {
+    renderForgotPasswordView(container, {
+      onGoToLogin: () => {
+        authScreenMode = 'login';
+        renderAuthScreen();
       },
-      onSignupSuccess: () => {
-        // Auth state automatically triggers subscription
+      onGoToReset: (tok) => {
+        if (tok) activeResetToken = tok;
+        authScreenMode = 'reset';
+        renderAuthScreen();
+      }
+    });
+  } else if (authScreenMode === 'reset') {
+    renderResetPasswordView(container, {
+      token: activeResetToken,
+      onGoToLogin: () => {
+        authScreenMode = 'login';
+        renderAuthScreen();
       }
     });
   } else {
@@ -97,8 +134,9 @@ function renderAuthScreen() {
         authScreenMode = 'signup';
         renderAuthScreen();
       },
-      onLoginSuccess: () => {
-        // Auth state automatically triggers subscription
+      onGoToForgotPassword: () => {
+        authScreenMode = 'forgot';
+        renderAuthScreen();
       }
     });
   }
