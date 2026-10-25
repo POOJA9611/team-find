@@ -85,7 +85,7 @@ def health_check():
 
 # Frontend SPA routes
 @app.route("/")
-@app.route("/<path:path>")
+@app.route("/<path:path>", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 def index(path=""):
     if path.startswith("api/") or path.startswith("uploads/"):
         return jsonify({"error": "Resource not found"}), 404

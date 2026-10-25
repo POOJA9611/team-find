@@ -1328,7 +1328,8 @@ def decide_team_invitation(invitation_id):
 
 
 # 16. Update Member Role and Responsibilities (Workspace)
-@teams_bp.route("/<int:team_id>/members/<int:target_student_id>/role", methods=["PUT"])
+@teams_bp.route("/<int:team_id>/members/<int:target_student_id>/role", methods=["PUT", "POST"])
+@teams_bp.route("/<int:team_id>/members/<int:target_student_id>/role/", methods=["PUT", "POST"])
 @authenticate_token
 @require_role("student")
 def update_member_role(team_id, target_student_id):
@@ -1351,14 +1352,17 @@ def update_member_role(team_id, target_student_id):
         role_title = (data.get("role_title") or data.get("roleTitle") or "").strip()
         responsibilities = (data.get("responsibilities") or "").strip()
 
+        if not role_title:
+            return jsonify({"error": "Role title is required."}), 400
+
         db.run(
             "UPDATE team_members SET role_title = ?, responsibilities = ? WHERE team_id = ? AND student_id = ?",
-            [role_title if role_title else None, responsibilities if responsibilities else None, team_id, target_student_id]
+            [role_title, responsibilities if responsibilities else None, team_id, target_student_id]
         )
 
         return jsonify({
             "message": "Member role and responsibilities updated successfully.",
-            "role_title": role_title or None,
+            "role_title": role_title,
             "responsibilities": responsibilities or None
         })
 
@@ -1367,8 +1371,9 @@ def update_member_role(team_id, target_student_id):
         return jsonify({"error": "Failed to update member role."}), 500
 
 
-# 17. Create Team Task (Workspace)
-@teams_bp.route("/<int:team_id>/tasks", methods=["POST"])
+# 17. Create Team Task & Retrieve Tasks (Workspace)
+@teams_bp.route("/<int:team_id>/tasks", methods=["GET", "POST"])
+@teams_bp.route("/<int:team_id>/tasks/", methods=["GET", "POST"])
 @authenticate_token
 @require_role("student")
 def create_team_task(team_id):
@@ -1379,6 +1384,21 @@ def create_team_task(team_id):
         team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
         if not team:
             return jsonify({"error": "Team not found."}), 404
+
+        # If GET request, return list of tasks for authorized member
+        if request.method == "GET":
+            is_mem = db.get("SELECT student_id FROM team_members WHERE team_id = ? AND student_id = ?", [team_id, current_student_id])
+            if not is_mem:
+                return jsonify({"error": "You are not an authorized member of this team."}), 403
+            tasks = db.all(
+                """SELECT tt.*, u.name as assigned_name, u.email as assigned_email, u.avatar as assigned_avatar
+                   FROM team_tasks tt
+                   LEFT JOIN users u ON tt.assigned_to = u.id
+                   WHERE tt.team_id = ?
+                   ORDER BY tt.created_at DESC""",
+                [team_id]
+            )
+            return jsonify({"tasks": tasks})
 
         if team["leader_id"] != current_student_id:
             return jsonify({"error": "Only the authorized team leader can create and assign tasks."}), 403
@@ -1429,7 +1449,8 @@ def create_team_task(team_id):
 
 
 # 18. Update Team Task Details (Workspace)
-@teams_bp.route("/<int:team_id>/tasks/<int:task_id>", methods=["PUT"])
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>", methods=["PUT", "POST"])
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/", methods=["PUT", "POST"])
 @authenticate_token
 @require_role("student")
 def update_team_task(team_id, task_id):
@@ -1495,6 +1516,7 @@ def update_team_task(team_id, task_id):
 
 # 19. Delete Team Task (Workspace)
 @teams_bp.route("/<int:team_id>/tasks/<int:task_id>", methods=["DELETE"])
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/", methods=["DELETE"])
 @authenticate_token
 @require_role("student")
 def delete_team_task(team_id, task_id):
@@ -1522,7 +1544,8 @@ def delete_team_task(team_id, task_id):
 
 
 # 20. Update Task Status (Workspace - Individual work completion)
-@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/status", methods=["PATCH"])
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/status", methods=["PATCH", "PUT", "POST"])
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/status/", methods=["PATCH", "PUT", "POST"])
 @authenticate_token
 @require_role("student")
 def update_task_status(team_id, task_id):

@@ -693,6 +693,7 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
       title: 'Create Project Task',
       maxWidth: '520px',
       contentHtml: `
+        <div id="task-modal-error" style="display: none; padding: 10px 14px; border-radius: 8px; background-color: #FEE2E2; color: #DC2626; font-size: 13px; font-weight: 600; margin-bottom: 14px;"></div>
         <form id="form-create-task" style="display: flex; flex-direction: column; gap: 16px;">
           <div>
             <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Task Title *</label>
@@ -716,6 +717,7 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
             </div>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+            <button type="button" class="btn btn-subtle" onclick="document.querySelector('.modal-backdrop-layer')?.remove()">Cancel</button>
             <button type="submit" id="btn-submit-create-task" class="btn btn-primary">Create Task</button>
           </div>
         </form>
@@ -723,6 +725,7 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
     });
 
     const form = document.getElementById('form-create-task');
+    const errorBanner = document.getElementById('task-modal-error');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const title = document.getElementById('task-title').value.trim();
@@ -730,17 +733,46 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
       const assignedTo = document.getElementById('task-assignee').value || null;
       const deadline = document.getElementById('task-deadline').value || null;
       const btn = document.getElementById('btn-submit-create-task');
-      if (btn) btn.disabled = true;
+
+      if (!title) {
+        if (errorBanner) {
+          errorBanner.textContent = 'Please provide a task title.';
+          errorBanner.style.display = 'block';
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Creating...';
+      }
+      if (errorBanner) errorBanner.style.display = 'none';
 
       try {
-        await api.createTeamTask(team.id, {
+        const res = await api.createTeamTask(team.id, {
           title, description, assigned_to: assignedTo, deadline
         });
         document.querySelector('.modal-backdrop-layer')?.remove();
+        workspaceSection = 'tasks';
         await loadData();
+        if (typeof socketManager?.showToastNotification === 'function') {
+          socketManager.showToastNotification({
+            title: 'Task Created',
+            message: res.message || `Task "${title}" created and saved to project workspace.`,
+            type: 'success'
+          });
+        }
       } catch (err) {
-        alert(err.message || 'Failed to create task.');
-        if (btn) btn.disabled = false;
+        if (errorBanner) {
+          errorBanner.textContent = err.message || 'Failed to create task.';
+          errorBanner.style.display = 'block';
+        } else {
+          alert(err.message || 'Failed to create task.');
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Create Task';
+        }
       }
     });
   };
@@ -806,39 +838,86 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
   const openAssignRoleModal = (team, member) => {
     openModal({
       title: `Assign Role: ${escapeHtml(member.name)}`,
-      maxWidth: '500px',
+      maxWidth: '520px',
       contentHtml: `
+        <div id="role-modal-error" style="display: none; padding: 10px 14px; border-radius: 8px; background-color: #FEE2E2; color: #DC2626; font-size: 13px; font-weight: 600; margin-bottom: 14px;"></div>
         <form id="form-assign-role" style="display: flex; flex-direction: column; gap: 16px;">
           <div>
             <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Role Title *</label>
             <input type="text" id="role-title-input" class="form-input" placeholder="e.g. Frontend Lead, ML Specialist, DevOps Architect" value="${escapeHtml(member.role_title || '')}" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+              ${['Frontend Lead', 'Backend Lead', 'Fullstack Engineer', 'Database Lead', 'DevOps / Cloud', 'ML / AI Specialist', 'QA & Testing'].map(preset => `
+                <button type="button" class="btn btn-xs btn-subtle btn-preset-role" data-preset="${preset}" style="font-size: 10px; padding: 2px 7px;">
+                  + ${preset}
+                </button>
+              `).join('')}
+            </div>
           </div>
           <div>
             <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Assigned Responsibilities</label>
             <textarea id="responsibilities-input" class="form-input" rows="4" placeholder="Detail specific modules, architectural areas, or project milestones this member leads..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">${escapeHtml(member.responsibilities || '')}</textarea>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+            <button type="button" class="btn btn-subtle" onclick="document.querySelector('.modal-backdrop-layer')?.remove()">Cancel</button>
             <button type="submit" id="btn-submit-assign-role" class="btn btn-primary">Save Role</button>
           </div>
         </form>
       `
     });
 
+    // Preset role click handler
+    document.querySelectorAll('.btn-preset-role').forEach(b => {
+      b.addEventListener('click', () => {
+        const inp = document.getElementById('role-title-input');
+        if (inp) inp.value = b.dataset.preset;
+      });
+    });
+
     const form = document.getElementById('form-assign-role');
+    const errorBanner = document.getElementById('role-modal-error');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const role_title = document.getElementById('role-title-input').value.trim();
       const responsibilities = document.getElementById('responsibilities-input').value.trim();
       const btn = document.getElementById('btn-submit-assign-role');
-      if (btn) btn.disabled = true;
+
+      if (!role_title) {
+        if (errorBanner) {
+          errorBanner.textContent = 'Please enter a role title.';
+          errorBanner.style.display = 'block';
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Saving...';
+      }
+      if (errorBanner) errorBanner.style.display = 'none';
 
       try {
-        await api.updateMemberRole(team.id, member.id, { role_title, responsibilities });
+        const res = await api.updateMemberRole(team.id, member.id, { role_title, responsibilities });
         document.querySelector('.modal-backdrop-layer')?.remove();
+        workspaceSection = 'members';
         await loadData();
+        if (typeof socketManager?.showToastNotification === 'function') {
+          socketManager.showToastNotification({
+            title: 'Role Saved',
+            message: res.message || `Role "${role_title}" saved for ${member.name}.`,
+            type: 'success'
+          });
+        }
       } catch (err) {
-        alert(err.message || 'Failed to update role.');
-        if (btn) btn.disabled = false;
+        if (errorBanner) {
+          errorBanner.textContent = err.message || 'Failed to update role.';
+          errorBanner.style.display = 'block';
+        } else {
+          alert(err.message || 'Failed to update role.');
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Save Role';
+        }
       }
     });
   };
@@ -961,7 +1040,15 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                     ` : ''}
                   </div>
 
-                  <div style="display: flex; gap: 8px; align-items: center;">
+                  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    ${isLeader ? `
+                      <button id="btn-header-create-task" class="btn btn-sm btn-primary">
+                        <i class="fa-solid fa-plus mr-1"></i> Create Task
+                      </button>
+                      <button id="btn-header-assign-roles" class="btn btn-sm btn-subtle">
+                        <i class="fa-solid fa-users-gear mr-1"></i> Assign Roles
+                      </button>
+                    ` : ''}
                     ${team.chat_group_id ? `
                       <button id="btn-open-team-chat-page" class="btn btn-sm btn-subtle">
                         <i class="fa-solid fa-comments mr-1"></i> Team Chat
@@ -1105,9 +1192,16 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
 
                   <!-- Confirmed Team Members Roster -->
                   <div>
-                    <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0 0 12px 0;">
-                      Confirmed Team Members (${confirmedCount} / ${maxMembers})
-                    </h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                      <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0;">
+                        Confirmed Team Members (${confirmedCount} / ${maxMembers})
+                      </h4>
+                      ${isLeader ? `
+                        <button id="btn-roster-assign-roles" class="btn btn-xs btn-primary">
+                          <i class="fa-solid fa-users-gear mr-1"></i> Manage Member Roles
+                        </button>
+                      ` : ''}
+                    </div>
                     <div style="background-color: var(--bg-subtle); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light);">
                       <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                         <thead>
@@ -1116,6 +1210,7 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                             <th style="padding: 10px 14px;">Role & Title</th>
                             <th style="padding: 10px 14px;">Strength / Skills</th>
                             <th style="padding: 10px 14px;">Task Progress</th>
+                            <th style="padding: 10px 14px; text-align: right;">Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1155,6 +1250,15 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                                     <span style="font-weight: 700; color: #4338CA;">${m.completed_tasks}/${m.total_tasks} completed</span>
                                     <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">(${m.progress_percentage}%)</span>
                                   </div>
+                                `}
+                              </td>
+                              <td style="padding: 10px 14px; text-align: right;">
+                                ${isLeader ? `
+                                  <button class="btn btn-xs btn-primary btn-assign-member-role" data-id="${m.id}" data-name="${escapeHtml(m.name)}" data-title="${escapeHtml(m.role_title || '')}" data-resp="${escapeHtml(m.responsibilities || '')}" style="font-size: 11px;">
+                                    <i class="fa-solid fa-pencil mr-1"></i> Assign Role
+                                  </button>
+                                ` : `
+                                  <span class="badge badge-subtle" style="font-size: 10px;">Confirmed</span>
                                 `}
                               </td>
                             </tr>
@@ -1215,17 +1319,28 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                           </div>
 
                           ${(myTeamData?.teamProgress?.total || 0) === 0 ? `
-                            <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">
+                            <div style="font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 12px;">
                               No tasks created yet for this project team.
                             </div>
                           ` : `
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px;">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; margin-bottom: 12px;">
                               <span class="badge badge-emerald"><i class="fa-solid fa-check mr-1"></i>${myTeamData?.teamProgress?.completed || 0} Completed</span>
                               <span class="badge badge-amber"><i class="fa-solid fa-clock mr-1"></i>${myTeamData?.teamProgress?.in_progress || 0} In Progress</span>
                               <span class="badge badge-subtle">${myTeamData?.teamProgress?.not_started || 0} Not Started</span>
                               ${(myTeamData?.teamProgress?.overdue || 0) > 0 ? `<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${myTeamData.teamProgress.overdue} Overdue</span>` : ''}
                             </div>
                           `}
+
+                          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); padding-top: 10px;">
+                            <span style="font-size: 11px; color: var(--text-muted);">
+                              <strong>${myTeamData?.teamProgress?.total || 0}</strong> total project deliverables
+                            </span>
+                            ${isLeader ? `
+                              <button id="btn-overview-create-task" class="btn btn-xs btn-primary" style="font-size: 11px;">
+                                <i class="fa-solid fa-plus mr-1"></i> Create Task
+                              </button>
+                            ` : ''}
+                          </div>
                         </div>
 
                         <!-- My Role & Work Completion -->
@@ -1246,13 +1361,23 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                             ${escapeHtml(myTeamData?.myRole?.responsibilities || (team.my_role === 'leader' ? 'Lead architecture, assign team tasks, and coordinate with mentor.' : 'Complete assigned deliverables and contribute to milestones.'))}
                           </p>
 
-                          <div style="border-top: 1px solid var(--border-light); padding-top: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+                          <div style="border-top: 1px solid var(--border-light); padding-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 8px;">
                             <span style="color: var(--text-muted);">
                               My Work: <strong>${myTeamData?.individualProgress?.completed || 0}/${myTeamData?.individualProgress?.total || 0}</strong> tasks (${myTeamData?.individualProgress?.percentage || 0}%)
                             </span>
-                            <button id="btn-goto-my-tasks" class="btn btn-xs btn-subtle" style="font-size: 11px;">
-                              View My Tasks <i class="fa-solid fa-arrow-right ml-1"></i>
-                            </button>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                              ${isLeader ? `
+                                <button class="btn btn-xs btn-subtle btn-assign-member-role" data-id="${auth.user?.id}" data-name="${escapeHtml(auth.user?.name || 'You')}" data-title="${escapeHtml(myTeamData?.myRole?.role_title || '')}" data-resp="${escapeHtml(myTeamData?.myRole?.responsibilities || '')}" style="font-size: 10px;">
+                                  <i class="fa-solid fa-pencil mr-1"></i> Edit Role
+                                </button>
+                                <button id="btn-overview-assign-roles" class="btn btn-xs btn-primary" style="font-size: 10px;">
+                                  <i class="fa-solid fa-users-gear mr-1"></i> Assign Roles
+                                </button>
+                              ` : ''}
+                              <button id="btn-goto-my-tasks" class="btn btn-xs btn-subtle" style="font-size: 11px;">
+                                View My Tasks <i class="fa-solid fa-arrow-right ml-1"></i>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1314,9 +1439,14 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                           <div class="card p-8 text-center text-muted" style="border: 1px dashed var(--border-color); background-color: var(--bg-subtle);">
                             <i class="fa-solid fa-list-check text-3xl mb-2" style="color: var(--color-primary); opacity: 0.5;"></i>
                             <h4 style="font-size: 15px; font-weight: 700; margin: 0 0 4px 0; color: var(--text-primary);">No tasks found</h4>
-                            <p style="font-size: 12px; margin: 0;">
-                              ${isLeader ? 'Click "+ Create Task" above to assign project deliverables to your team.' : 'No tasks assigned under this filter.'}
+                            <p style="font-size: 12px; margin: 0 0 12px 0;">
+                              ${isLeader ? 'Click "+ Create Task" above or below to assign project deliverables to your team.' : 'No tasks assigned under this filter.'}
                             </p>
+                            ${isLeader ? `
+                              <button id="btn-empty-create-task" class="btn btn-sm btn-primary">
+                                <i class="fa-solid fa-plus mr-1"></i> Create Task
+                              </button>
+                            ` : ''}
                           </div>
                         `;
                       }
@@ -1965,10 +2095,23 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
       });
     });
 
-    // Open Create Task Modal
-    container.querySelector('#btn-open-create-task')?.addEventListener('click', () => {
+    // Open Create Task Modal (header, overview card, tasks header, and empty state)
+    const triggerCreateTask = () => {
       if (team) openCreateTaskModal(team);
-    });
+    };
+    container.querySelector('#btn-header-create-task')?.addEventListener('click', triggerCreateTask);
+    container.querySelector('#btn-overview-create-task')?.addEventListener('click', triggerCreateTask);
+    container.querySelector('#btn-open-create-task')?.addEventListener('click', triggerCreateTask);
+    container.querySelector('#btn-empty-create-task')?.addEventListener('click', triggerCreateTask);
+
+    // Quick-jump to Members & Roles tab
+    const triggerGotoMembers = () => {
+      workspaceSection = 'members';
+      render();
+    };
+    container.querySelector('#btn-header-assign-roles')?.addEventListener('click', triggerGotoMembers);
+    container.querySelector('#btn-roster-assign-roles')?.addEventListener('click', triggerGotoMembers);
+    container.querySelector('#btn-overview-assign-roles')?.addEventListener('click', triggerGotoMembers);
 
     // Open Edit Task Modal
     container.querySelectorAll('.btn-edit-task').forEach((btn) => {
