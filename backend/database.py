@@ -242,6 +242,7 @@ def get_db():
     global _db_singleton
     if _db_singleton is None:
         _db_singleton = Database()
+        ensure_workspace_schema(_db_singleton)
     return _db_singleton
 
 
@@ -280,3 +281,69 @@ def initialize_database():
         conn.executescript(schema_content)
         conn.commit()
         print("✅ SQLite database schema initialized successfully.")
+
+    ensure_workspace_schema(db)
+
+
+def ensure_workspace_schema(db):
+    """
+    Ensures workspace tables and columns exist in a safe, non-destructive, backward-compatible manner.
+    """
+    try:
+        conn = db._get_connection()
+        if db.mode == "sqlite":
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(team_members)").fetchall()]
+            if "role_title" not in cols:
+                conn.execute("ALTER TABLE team_members ADD COLUMN role_title TEXT DEFAULT NULL")
+            if "responsibilities" not in cols:
+                conn.execute("ALTER TABLE team_members ADD COLUMN responsibilities TEXT DEFAULT NULL")
+
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS team_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                assigned_to INTEGER NULLABLE,
+                deadline DATE NULLABLE,
+                status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started', 'in_progress', 'completed')),
+                created_by INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """)
+            conn.commit()
+        else:
+            with conn.cursor() as cur:
+                cur.execute("""
+                CREATE TABLE IF NOT EXISTS team_tasks (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    team_id INT NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT DEFAULT NULL,
+                    assigned_to INT NULL DEFAULT NULL,
+                    deadline DATE NULL DEFAULT NULL,
+                    status ENUM('not_started', 'in_progress', 'completed') NOT NULL DEFAULT 'not_started',
+                    created_by INT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_tasks_team (team_id),
+                    INDEX idx_tasks_assigned (assigned_to),
+                    CONSTRAINT fk_task_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_task_assigned FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_task_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                """)
+                try:
+                    cur.execute("ALTER TABLE team_members ADD COLUMN role_title VARCHAR(150) DEFAULT NULL")
+                except Exception:
+                    pass
+                try:
+                    cur.execute("ALTER TABLE team_members ADD COLUMN responsibilities TEXT DEFAULT NULL")
+                except Exception:
+                    pass
+    except Exception as err:
+        print("ensure_workspace_schema warning:", err)

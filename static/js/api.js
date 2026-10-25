@@ -154,7 +154,31 @@ export const api = {
 
   // Teams
   getTeams: () => request('/teams'),
-  getMyTeam: () => request('/teams/my-team'),
+  getMyTeam: (teamId) => request(teamId ? `/teams/my-team?team_id=${teamId}` : '/teams/my-team'),
+  updateMemberRole: (teamId, studentId, roleData) =>
+    request(`/teams/${teamId}/members/${studentId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify(roleData)
+    }),
+  createTeamTask: (teamId, taskData) =>
+    request(`/teams/${teamId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(taskData)
+    }),
+  updateTeamTask: (teamId, taskId, taskData) =>
+    request(`/teams/${teamId}/tasks/${taskId}`, {
+      method: 'PUT',
+      body: JSON.stringify(taskData)
+    }),
+  deleteTeamTask: (teamId, taskId) =>
+    request(`/teams/${teamId}/tasks/${taskId}`, {
+      method: 'DELETE'
+    }),
+  updateTaskStatus: (teamId, taskId, status) =>
+    request(`/teams/${teamId}/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
   createTeamProposal: (proposalData) =>
     request('/teams/proposals', {
       method: 'POST',

@@ -132,7 +132,7 @@ def analyze_team_skill_balance(team: dict, members: list):
     }
 
 
-# 2. Get My Team Details
+# 2. Get My Team Details & Project Workspace
 @teams_bp.route("/my-team", methods=["GET"])
 @authenticate_token
 @require_role("student")
@@ -140,30 +140,81 @@ def get_my_team():
     try:
         db = get_db()
         student_id = g.user["id"]
+        requested_team_id = request.args.get("team_id")
 
-        team = db.get(
-            """SELECT t.*, tm.role as my_role, u.name as faculty_name, u.email as faculty_email,
-                      u.avatar as faculty_avatar, fp.designation as faculty_designation,
-                      fp.department as faculty_department, fp.subjects as faculty_subjects,
-                      cg.id as chat_group_id
+        # 1. Retrieve all teams this student belongs to
+        all_my_teams = db.all(
+            """SELECT t.id, t.name, t.project_title, tm.role as my_role
                FROM teams t
                JOIN team_members tm ON t.id = tm.team_id
-               LEFT JOIN users u ON t.faculty_id = u.id
-               LEFT JOIN faculty_profiles fp ON u.id = fp.user_id
-               LEFT JOIN chat_groups cg ON t.id = cg.team_id
                WHERE tm.student_id = ?
-               ORDER BY t.created_at DESC
-               LIMIT 1""",
+               ORDER BY t.created_at DESC""",
             [student_id]
         )
+
+        team = None
+        if requested_team_id:
+            try:
+                t_id = int(requested_team_id)
+                team = db.get(
+                    """SELECT t.*, tm.role as my_role, tm.role_title, tm.responsibilities,
+                              u.name as faculty_name, u.email as faculty_email,
+                              u.avatar as faculty_avatar, fp.designation as faculty_designation,
+                              fp.department as faculty_department, fp.subjects as faculty_subjects,
+                              cg.id as chat_group_id,
+                              lead.name as leader_name, lead.email as leader_email
+                       FROM teams t
+                       JOIN team_members tm ON t.id = tm.team_id
+                       LEFT JOIN users u ON t.faculty_id = u.id
+                       LEFT JOIN users lead ON t.leader_id = lead.id
+                       LEFT JOIN faculty_profiles fp ON u.id = fp.user_id
+                       LEFT JOIN chat_groups cg ON t.id = cg.team_id
+                       WHERE tm.student_id = ? AND t.id = ?""",
+                    [student_id, t_id]
+                )
+                if not team:
+                    return jsonify({"error": "You are not an authorized member of this project team."}), 403
+            except ValueError:
+                pass
+
+        if not team:
+            team = db.get(
+                """SELECT t.*, tm.role as my_role, tm.role_title, tm.responsibilities,
+                          u.name as faculty_name, u.email as faculty_email,
+                          u.avatar as faculty_avatar, fp.designation as faculty_designation,
+                          fp.department as faculty_department, fp.subjects as faculty_subjects,
+                          cg.id as chat_group_id,
+                          lead.name as leader_name, lead.email as leader_email
+                   FROM teams t
+                   JOIN team_members tm ON t.id = tm.team_id
+                   LEFT JOIN users u ON t.faculty_id = u.id
+                   LEFT JOIN users lead ON t.leader_id = lead.id
+                   LEFT JOIN faculty_profiles fp ON u.id = fp.user_id
+                   LEFT JOIN chat_groups cg ON t.id = cg.team_id
+                   WHERE tm.student_id = ?
+                   ORDER BY t.created_at DESC
+                   LIMIT 1""",
+                [student_id]
+            )
 
         members = []
         incoming_requests = []
         skill_balance = None
+        tasks = []
+        my_tasks = []
+        team_progress = {
+            "total": 0, "completed": 0, "in_progress": 0, "not_started": 0, "overdue": 0, "percentage": 0
+        }
+        individual_progress = {
+            "total": 0, "completed": 0, "in_progress": 0, "not_started": 0, "overdue": 0, "percentage": 0
+        }
+        my_role = None
 
         if team:
+            # 2. Retrieve team members with role titles and responsibilities
             members = db.all(
-                """SELECT u.id, u.name, u.email, u.avatar, tm.role as team_role, tm.joined_at,
+                """SELECT u.id, u.name, u.email, u.avatar, tm.role as team_role,
+                          tm.role_title, tm.responsibilities, tm.joined_at,
                           sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.bio
                    FROM team_members tm
                    JOIN users u ON tm.student_id = u.id
@@ -184,6 +235,75 @@ def get_my_team():
 
             skill_balance = analyze_team_skill_balance(team, members)
             team["skill_balance"] = skill_balance
+
+            # 3. Retrieve team tasks
+            tasks = db.all(
+                """SELECT tt.*, 
+                          u.name as assigned_name, u.email as assigned_email, u.avatar as assigned_avatar,
+                          cb.name as creator_name
+                   FROM team_tasks tt
+                   LEFT JOIN users u ON tt.assigned_to = u.id
+                   LEFT JOIN users cb ON tt.created_by = cb.id
+                   WHERE tt.team_id = ?
+                   ORDER BY (CASE tt.status WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END),
+                            tt.deadline ASC, tt.id DESC""",
+                [team["id"]]
+            )
+
+            from datetime import date
+            today_str = date.today().isoformat()
+
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for t in tasks if t["status"] == "completed")
+            in_progress_tasks = sum(1 for t in tasks if t["status"] == "in_progress")
+            not_started_tasks = sum(1 for t in tasks if t["status"] == "not_started")
+            overdue_tasks = sum(
+                1 for t in tasks 
+                if t["status"] != "completed" and t.get("deadline") and str(t["deadline"]) < today_str
+            )
+
+            team_progress = {
+                "total": total_tasks,
+                "completed": completed_tasks,
+                "in_progress": in_progress_tasks,
+                "not_started": not_started_tasks,
+                "overdue": overdue_tasks,
+                "percentage": round((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+            }
+
+            my_tasks = [t for t in tasks if t.get("assigned_to") == student_id]
+            my_total = len(my_tasks)
+            my_completed = sum(1 for t in my_tasks if t["status"] == "completed")
+            my_in_progress = sum(1 for t in my_tasks if t["status"] == "in_progress")
+            my_not_started = sum(1 for t in my_tasks if t["status"] == "not_started")
+            my_overdue = sum(
+                1 for t in my_tasks 
+                if t["status"] != "completed" and t.get("deadline") and str(t["deadline"]) < today_str
+            )
+
+            individual_progress = {
+                "total": my_total,
+                "completed": my_completed,
+                "in_progress": my_in_progress,
+                "not_started": my_not_started,
+                "overdue": my_overdue,
+                "percentage": round((my_completed / my_total) * 100) if my_total > 0 else 0
+            }
+
+            # Attach task counts to each member
+            for m in members:
+                m_tasks = [t for t in tasks if t.get("assigned_to") == m["id"]]
+                m["total_tasks"] = len(m_tasks)
+                m["completed_tasks"] = sum(1 for t in m_tasks if t["status"] == "completed")
+                m["progress_percentage"] = round((m["completed_tasks"] / len(m_tasks)) * 100) if len(m_tasks) > 0 else 0
+
+            # 4. Student's own role details
+            my_role = {
+                "role": team.get("my_role") or "member",
+                "role_title": team.get("role_title") or ("Project Leader" if team.get("my_role") == "leader" else "Team Member"),
+                "responsibilities": team.get("responsibilities") or ("Oversee project roadmap, task assignments, and team delivery." if team.get("my_role") == "leader" else "Contribute to module development, tasks, and team milestones."),
+                "is_leader": bool(team.get("leader_id") == student_id or team.get("my_role") == "leader")
+            }
 
             if team.get("leader_id") == student_id or team.get("my_role") == "leader":
                 incoming_requests = db.all(
@@ -214,8 +334,14 @@ def get_my_team():
         return jsonify({
             "team": team,
             "members": members,
+            "myTeamsList": all_my_teams,
             "incomingRequests": incoming_requests,
-            "skillBalance": skill_balance
+            "skillBalance": skill_balance,
+            "tasks": tasks,
+            "myTasks": my_tasks,
+            "teamProgress": team_progress,
+            "individualProgress": individual_progress,
+            "myRole": my_role
         })
 
     except Exception as error:
@@ -1199,3 +1325,252 @@ def decide_team_invitation(invitation_id):
     except Exception as error:
         print("Decide invitation error:", error)
         return jsonify({"error": "Failed to process invitation decision."}), 500
+
+
+# 16. Update Member Role and Responsibilities (Workspace)
+@teams_bp.route("/<int:team_id>/members/<int:target_student_id>/role", methods=["PUT"])
+@authenticate_token
+@require_role("student")
+def update_member_role(team_id, target_student_id):
+    try:
+        db = get_db()
+        current_student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        if team["leader_id"] != current_student_id:
+            return jsonify({"error": "Only the authorized team leader can assign or update member roles."}), 403
+
+        member = db.get("SELECT student_id FROM team_members WHERE team_id = ? AND student_id = ?", [team_id, target_student_id])
+        if not member:
+            return jsonify({"error": "Selected student is not a confirmed member of this team."}), 404
+
+        data = request.get_json(silent=True) or {}
+        role_title = (data.get("role_title") or data.get("roleTitle") or "").strip()
+        responsibilities = (data.get("responsibilities") or "").strip()
+
+        db.run(
+            "UPDATE team_members SET role_title = ?, responsibilities = ? WHERE team_id = ? AND student_id = ?",
+            [role_title if role_title else None, responsibilities if responsibilities else None, team_id, target_student_id]
+        )
+
+        return jsonify({
+            "message": "Member role and responsibilities updated successfully.",
+            "role_title": role_title or None,
+            "responsibilities": responsibilities or None
+        })
+
+    except Exception as error:
+        print("Update member role error:", error)
+        return jsonify({"error": "Failed to update member role."}), 500
+
+
+# 17. Create Team Task (Workspace)
+@teams_bp.route("/<int:team_id>/tasks", methods=["POST"])
+@authenticate_token
+@require_role("student")
+def create_team_task(team_id):
+    try:
+        db = get_db()
+        current_student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        if team["leader_id"] != current_student_id:
+            return jsonify({"error": "Only the authorized team leader can create and assign tasks."}), 403
+
+        data = request.get_json(silent=True) or {}
+        title = (data.get("title") or "").strip()
+        description = (data.get("description") or "").strip()
+        assigned_to = data.get("assigned_to") or data.get("assignedTo")
+        deadline = (data.get("deadline") or "").strip() or None
+
+        if not title:
+            return jsonify({"error": "Task title is required."}), 400
+
+        if assigned_to:
+            try:
+                assigned_to = int(assigned_to)
+                is_mem = db.get("SELECT student_id FROM team_members WHERE team_id = ? AND student_id = ?", [team_id, assigned_to])
+                if not is_mem:
+                    return jsonify({"error": "Selected assignee is not a confirmed member of this team."}), 400
+            except ValueError:
+                return jsonify({"error": "Invalid assignee ID."}), 400
+        else:
+            assigned_to = None
+
+        res = db.run(
+            """INSERT INTO team_tasks (team_id, title, description, assigned_to, deadline, status, created_by)
+               VALUES (?, ?, ?, ?, ?, 'not_started', ?)""",
+            [team_id, title, description or None, assigned_to, deadline, current_student_id]
+        )
+        task_id = res.lastID
+
+        task = db.get(
+            """SELECT tt.*, u.name as assigned_name, u.email as assigned_email, u.avatar as assigned_avatar
+               FROM team_tasks tt
+               LEFT JOIN users u ON tt.assigned_to = u.id
+               WHERE tt.id = ?""",
+            [task_id]
+        )
+
+        return jsonify({
+            "message": "Task created successfully.",
+            "task": task
+        }), 201
+
+    except Exception as error:
+        print("Create task error:", error)
+        return jsonify({"error": "Failed to create task."}), 500
+
+
+# 18. Update Team Task Details (Workspace)
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>", methods=["PUT"])
+@authenticate_token
+@require_role("student")
+def update_team_task(team_id, task_id):
+    try:
+        db = get_db()
+        current_student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        if team["leader_id"] != current_student_id:
+            return jsonify({"error": "Only the authorized team leader can edit task details."}), 403
+
+        task = db.get("SELECT * FROM team_tasks WHERE id = ? AND team_id = ?", [task_id, team_id])
+        if not task:
+            return jsonify({"error": "Task not found."}), 404
+
+        data = request.get_json(silent=True) or {}
+        title = (data.get("title") or "").strip()
+        description = (data.get("description") or "").strip()
+        assigned_to = data.get("assigned_to") or data.get("assignedTo")
+        deadline = (data.get("deadline") or "").strip() or None
+
+        if not title:
+            return jsonify({"error": "Task title is required."}), 400
+
+        if assigned_to:
+            try:
+                assigned_to = int(assigned_to)
+                is_mem = db.get("SELECT student_id FROM team_members WHERE team_id = ? AND student_id = ?", [team_id, assigned_to])
+                if not is_mem:
+                    return jsonify({"error": "Selected assignee is not a member of this team."}), 400
+            except ValueError:
+                return jsonify({"error": "Invalid assignee ID."}), 400
+        else:
+            assigned_to = None
+
+        db.run(
+            """UPDATE team_tasks 
+               SET title = ?, description = ?, assigned_to = ?, deadline = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            [title, description or None, assigned_to, deadline, task_id]
+        )
+
+        updated_task = db.get(
+            """SELECT tt.*, u.name as assigned_name, u.email as assigned_email, u.avatar as assigned_avatar
+               FROM team_tasks tt
+               LEFT JOIN users u ON tt.assigned_to = u.id
+               WHERE tt.id = ?""",
+            [task_id]
+        )
+
+        return jsonify({
+            "message": "Task updated successfully.",
+            "task": updated_task
+        })
+
+    except Exception as error:
+        print("Update task error:", error)
+        return jsonify({"error": "Failed to update task."}), 500
+
+
+# 19. Delete Team Task (Workspace)
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>", methods=["DELETE"])
+@authenticate_token
+@require_role("student")
+def delete_team_task(team_id, task_id):
+    try:
+        db = get_db()
+        current_student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        if team["leader_id"] != current_student_id:
+            return jsonify({"error": "Only the authorized team leader can delete tasks."}), 403
+
+        task = db.get("SELECT * FROM team_tasks WHERE id = ? AND team_id = ?", [task_id, team_id])
+        if not task:
+            return jsonify({"error": "Task not found."}), 404
+
+        db.run("DELETE FROM team_tasks WHERE id = ?", [task_id])
+        return jsonify({"message": "Task deleted successfully."})
+
+    except Exception as error:
+        print("Delete task error:", error)
+        return jsonify({"error": "Failed to delete task."}), 500
+
+
+# 20. Update Task Status (Workspace - Individual work completion)
+@teams_bp.route("/<int:team_id>/tasks/<int:task_id>/status", methods=["PATCH"])
+@authenticate_token
+@require_role("student")
+def update_task_status(team_id, task_id):
+    try:
+        db = get_db()
+        current_student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        task = db.get("SELECT * FROM team_tasks WHERE id = ? AND team_id = ?", [task_id, team_id])
+        if not task:
+            return jsonify({"error": "Task not found."}), 404
+
+        # Strict authorization rule:
+        # A student can only update the status of tasks assigned to them,
+        # or the authorized team leader can update any task status.
+        is_assigned = (task["assigned_to"] == current_student_id)
+        is_leader = (team["leader_id"] == current_student_id)
+
+        if not is_assigned and not is_leader:
+            return jsonify({"error": "You are only permitted to update the progress of tasks assigned to you."}), 403
+
+        data = request.get_json(silent=True) or {}
+        new_status = data.get("status")
+
+        if new_status not in ["not_started", "in_progress", "completed"]:
+            return jsonify({"error": "Invalid status. Must be 'not_started', 'in_progress', or 'completed'."}), 400
+
+        db.run(
+            "UPDATE team_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [new_status, task_id]
+        )
+
+        updated_task = db.get(
+            """SELECT tt.*, u.name as assigned_name, u.email as assigned_email, u.avatar as assigned_avatar
+               FROM team_tasks tt
+               LEFT JOIN users u ON tt.assigned_to = u.id
+               WHERE tt.id = ?""",
+            [task_id]
+        )
+
+        return jsonify({
+            "message": f"Task status updated to {new_status.replace('_', ' ')}.",
+            "task": updated_task
+        })
+
+    except Exception as error:
+        print("Update task status error:", error)
+        return jsonify({"error": "Failed to update task status."}), 500

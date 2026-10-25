@@ -616,6 +616,9 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
 
   let activeTab = viewParams.initialTab || 'my-team';
   let myTeamSubView = 'overview'; // 'overview' | 'applications' | 'smart-match'
+  let workspaceSection = 'overview'; // 'overview' | 'tasks' | 'members' | 'files'
+  let taskFilter = 'all'; // 'all' | 'my' | 'in_progress' | 'completed' | 'not_started'
+  let selectedTeamId = viewParams.teamId || null;
   let myTeamData = null;
   let availableTeams = [];
   let searchQuery = '';
@@ -632,15 +635,35 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
       .replace(/'/g, '&#039;');
   }
 
+  function formatDeadline(dateStr) {
+    if (!dateStr) return 'No deadline';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+      return dateStr;
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  function isOverdue(deadlineStr, status) {
+    if (!deadlineStr || status === 'completed') return false;
+    const today = new Date().toISOString().split('T')[0];
+    return deadlineStr < today;
+  }
+
   const loadData = async () => {
     try {
       const [teamRes, availRes] = await Promise.all([
-        api.getMyTeam().catch(() => null),
+        api.getMyTeam(selectedTeamId).catch(() => null),
         api.getAvailableTeamsToJoin().catch(() => ({ teams: [] }))
       ]);
 
       myTeamData = teamRes;
-      availableTeams = availRes.teams || [];
+      availableTeams = availRes?.teams || [];
       render();
     } catch (err) {
       container.innerHTML = `<div class="p-8 text-center text-danger">${err.message || 'Failed to load teams.'}</div>`;
@@ -662,6 +685,162 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
       candidatesLoading = false;
       render();
     }
+  };
+
+  const openCreateTaskModal = (team) => {
+    const members = myTeamData?.members || [];
+    openModal({
+      title: 'Create Project Task',
+      maxWidth: '520px',
+      contentHtml: `
+        <form id="form-create-task" style="display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Task Title *</label>
+            <input type="text" id="task-title" class="form-input" placeholder="e.g. Design relational database schema" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Description & Objectives</label>
+            <textarea id="task-description" class="form-input" rows="3" placeholder="Specific deliverables and requirements for this task..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;"></textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Assign To</label>
+              <select id="task-assignee" class="form-input" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+                <option value="">Unassigned</option>
+                ${members.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.team_role)})</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Deadline</label>
+              <input type="date" id="task-deadline" class="form-input" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+            <button type="submit" id="btn-submit-create-task" class="btn btn-primary">Create Task</button>
+          </div>
+        </form>
+      `
+    });
+
+    const form = document.getElementById('form-create-task');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('task-title').value.trim();
+      const description = document.getElementById('task-description').value.trim();
+      const assignedTo = document.getElementById('task-assignee').value || null;
+      const deadline = document.getElementById('task-deadline').value || null;
+      const btn = document.getElementById('btn-submit-create-task');
+      if (btn) btn.disabled = true;
+
+      try {
+        await api.createTeamTask(team.id, {
+          title, description, assigned_to: assignedTo, deadline
+        });
+        document.querySelector('.modal-backdrop-layer')?.remove();
+        await loadData();
+      } catch (err) {
+        alert(err.message || 'Failed to create task.');
+        if (btn) btn.disabled = false;
+      }
+    });
+  };
+
+  const openEditTaskModal = (team, task) => {
+    const members = myTeamData?.members || [];
+    openModal({
+      title: 'Edit Project Task',
+      maxWidth: '520px',
+      contentHtml: `
+        <form id="form-edit-task" style="display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Task Title *</label>
+            <input type="text" id="edit-task-title" class="form-input" value="${escapeHtml(task.title)}" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Description & Objectives</label>
+            <textarea id="edit-task-description" class="form-input" rows="3" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">${escapeHtml(task.description || '')}</textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Assign To</label>
+              <select id="edit-task-assignee" class="form-input" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+                <option value="">Unassigned</option>
+                ${members.map(m => `<option value="${m.id}" ${task.assigned_to === m.id ? 'selected' : ''}>${escapeHtml(m.name)} (${escapeHtml(m.team_role)})</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Deadline</label>
+              <input type="date" id="edit-task-deadline" class="form-input" value="${escapeHtml(task.deadline || '')}" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+            <button type="submit" id="btn-submit-edit-task" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      `
+    });
+
+    const form = document.getElementById('form-edit-task');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('edit-task-title').value.trim();
+      const description = document.getElementById('edit-task-description').value.trim();
+      const assignedTo = document.getElementById('edit-task-assignee').value || null;
+      const deadline = document.getElementById('edit-task-deadline').value || null;
+      const btn = document.getElementById('btn-submit-edit-task');
+      if (btn) btn.disabled = true;
+
+      try {
+        await api.updateTeamTask(team.id, task.id, {
+          title, description, assigned_to: assignedTo, deadline
+        });
+        document.querySelector('.modal-backdrop-layer')?.remove();
+        await loadData();
+      } catch (err) {
+        alert(err.message || 'Failed to update task.');
+        if (btn) btn.disabled = false;
+      }
+    });
+  };
+
+  const openAssignRoleModal = (team, member) => {
+    openModal({
+      title: `Assign Role: ${escapeHtml(member.name)}`,
+      maxWidth: '500px',
+      contentHtml: `
+        <form id="form-assign-role" style="display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Role Title *</label>
+            <input type="text" id="role-title-input" class="form-input" placeholder="e.g. Frontend Lead, ML Specialist, DevOps Architect" value="${escapeHtml(member.role_title || '')}" required style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;" />
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: block;">Assigned Responsibilities</label>
+            <textarea id="responsibilities-input" class="form-input" rows="4" placeholder="Detail specific modules, architectural areas, or project milestones this member leads..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">${escapeHtml(member.responsibilities || '')}</textarea>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+            <button type="submit" id="btn-submit-assign-role" class="btn btn-primary">Save Role</button>
+          </div>
+        </form>
+      `
+    });
+
+    const form = document.getElementById('form-assign-role');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const role_title = document.getElementById('role-title-input').value.trim();
+      const responsibilities = document.getElementById('responsibilities-input').value.trim();
+      const btn = document.getElementById('btn-submit-assign-role');
+      if (btn) btn.disabled = true;
+
+      try {
+        await api.updateMemberRole(team.id, member.id, { role_title, responsibilities });
+        document.querySelector('.modal-backdrop-layer')?.remove();
+        await loadData();
+      } catch (err) {
+        alert(err.message || 'Failed to update role.');
+        if (btn) btn.disabled = false;
+      }
+    });
   };
 
   const render = () => {
@@ -737,12 +916,38 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
               </div>
             </div>
           ` : `
-            <!-- Sub-View: Team Overview -->
+            <!-- Sub-View: Team Overview & Project Workspace -->
             ${myTeamSubView === 'overview' ? `
               <div class="card" style="padding: 24px; border-radius: 16px;">
+                <!-- Optional Multi-Team Switcher -->
+                ${(myTeamData?.myTeamsList || []).length > 1 ? `
+                  <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-radius: 12px; padding: 10px 16px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <i class="fa-solid fa-layer-group text-indigo"></i>
+                      <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">My Project Teams (${myTeamData.myTeamsList.length}):</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                      ${myTeamData.myTeamsList.map(t => `
+                        <button class="btn btn-xs ${t.id === team.id ? 'btn-primary' : 'btn-subtle'} btn-switch-team" data-id="${t.id}" style="font-size: 11px;">
+                          ${escapeHtml(t.name)} ${t.my_role === 'leader' ? '👑' : ''}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+
                 <!-- Team Title & Status Header -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
                   <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                      <span style="font-size: 11px; font-weight: 800; color: var(--color-primary); text-transform: uppercase;">
+                        ${escapeHtml(team.domain || 'Capstone')}
+                      </span>
+                      <span class="badge ${team.status === 'approved' ? 'badge-emerald' : 'badge-warning'}">
+                        ${team.status.replace('_', ' ').toUpperCase()}
+                      </span>
+                      ${isLeader ? '<span class="badge badge-amber">Leader</span>' : ''}
+                    </div>
                     <h3 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
                       My Team — ${escapeHtml(team.name)}
                     </h3>
@@ -757,10 +962,6 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                   </div>
 
                   <div style="display: flex; gap: 8px; align-items: center;">
-                    <span class="badge ${team.status === 'approved' ? 'badge-emerald' : 'badge-warning'}">
-                      ${team.status.replace('_', ' ').toUpperCase()}
-                    </span>
-                    ${isLeader ? '<span class="badge badge-amber">Leader</span>' : ''}
                     ${team.chat_group_id ? `
                       <button id="btn-open-team-chat-page" class="btn btn-sm btn-subtle">
                         <i class="fa-solid fa-comments mr-1"></i> Team Chat
@@ -769,181 +970,549 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                   </div>
                 </div>
 
-                <!-- Metrics & Recruiting Row (Matches Mockup) -->
-                <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-radius: 14px; padding: 18px 24px; margin-bottom: 22px;">
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px;">
-                    <div>
-                      <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
-                        ${confirmedCount} / ${maxMembers}
-                      </div>
-                      <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
-                        team members
-                      </div>
-                    </div>
-                    <div>
-                      <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
-                        ${vacancies}
-                      </div>
-                      <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
-                        vacancies
-                      </div>
-                    </div>
-                  </div>
+                <!-- Workspace Sub-Navigation Tabs -->
+                <div style="display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--border-light); padding-bottom: 12px; margin-bottom: 22px; flex-wrap: wrap;">
+                  <button id="ws-tab-overview" class="btn btn-sm ${workspaceSection === 'overview' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'overview' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
+                    <i class="fa-solid fa-gauge mr-1"></i> Overview & Progress
+                  </button>
+                  <button id="ws-tab-tasks" class="btn btn-sm ${workspaceSection === 'tasks' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'tasks' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
+                    <i class="fa-solid fa-list-check mr-1"></i> Tasks & Work
+                    <span class="badge ${workspaceSection === 'tasks' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 6px; font-size: 10px;">${(myTeamData?.tasks || []).length}</span>
+                  </button>
+                  <button id="ws-tab-members" class="btn btn-sm ${workspaceSection === 'members' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'members' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
+                    <i class="fa-solid fa-users-gear mr-1"></i> Members & Roles
+                    <span class="badge ${workspaceSection === 'members' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 6px; font-size: 10px;">${confirmedCount}</span>
+                  </button>
+                  <button id="ws-tab-files" class="btn btn-sm ${workspaceSection === 'files' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'files' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
+                    <i class="fa-solid fa-folder-open mr-1"></i> Chat & Files
+                  </button>
+                </div>
 
-                  <!-- Recruiting Status Line -->
-                  <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 14px; flex-wrap: wrap; gap: 10px;">
-                    <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
-                      Recruiting status
-                    </span>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                      <span class="badge ${team.is_accepting_members ? 'badge-emerald' : 'badge-danger'}" style="padding: 4px 10px; font-weight: 700;">
-                        ${team.is_accepting_members ? 'Open' : 'Closed'}
+                <!-- SECTION 1: OVERVIEW & PROGRESS -->
+                ${workspaceSection === 'overview' ? `
+                  <!-- Metrics & Recruiting Row (Matches Mockup) -->
+                  <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-radius: 14px; padding: 18px 24px; margin-bottom: 22px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px;">
+                      <div>
+                        <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
+                          ${confirmedCount} / ${maxMembers}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
+                          team members
+                        </div>
+                      </div>
+                      <div>
+                        <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
+                          ${vacancies}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
+                          vacancies
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Recruiting Status Line -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 14px; flex-wrap: wrap; gap: 10px;">
+                      <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
+                        Recruiting status
                       </span>
-                      ${isLeader ? `
-                        <button id="btn-toggle-recruiting" class="btn btn-xs ${team.is_accepting_members ? 'btn-subtle' : 'btn-primary'}" style="font-size: 11px;">
-                          ${team.is_accepting_members ? 'Close Recruiting' : 'Open Recruiting'}
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="badge ${team.is_accepting_members ? 'badge-emerald' : 'badge-danger'}" style="padding: 4px 10px; font-weight: 700;">
+                          ${team.is_accepting_members ? 'Open' : 'Closed'}
+                        </span>
+                        ${isLeader ? `
+                          <button id="btn-toggle-recruiting" class="btn btn-xs ${team.is_accepting_members ? 'btn-subtle' : 'btn-primary'}" style="font-size: 11px;">
+                            ${team.is_accepting_members ? 'Close Recruiting' : 'Open Recruiting'}
+                          </button>
+                        ` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Accurate Progress & My Role Cards -->
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 22px;">
+                    <!-- Overall Team Progress -->
+                    <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <i class="fa-solid fa-chart-line text-indigo"></i>
+                          <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0;">Overall Team Progress</h4>
+                        </div>
+                        <span style="font-size: 18px; font-weight: 800; color: #4338CA;">
+                          ${(myTeamData?.teamProgress?.total || 0) > 0 ? `${myTeamData.teamProgress.percentage}%` : '0%'}
+                        </span>
+                      </div>
+
+                      <div style="width: 100%; height: 8px; background-color: #EEF2FF; border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                        <div style="width: ${myTeamData?.teamProgress?.percentage || 0}%; height: 100%; background: linear-gradient(90deg, #4338CA, #10B981); border-radius: 4px; transition: width 0.3s ease;"></div>
+                      </div>
+
+                      ${(myTeamData?.teamProgress?.total || 0) === 0 ? `
+                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">
+                          No tasks created yet for this project team.
+                        </div>
+                      ` : `
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px;">
+                          <span class="badge badge-emerald"><i class="fa-solid fa-check mr-1"></i>${myTeamData?.teamProgress?.completed || 0} Completed</span>
+                          <span class="badge badge-amber"><i class="fa-solid fa-clock mr-1"></i>${myTeamData?.teamProgress?.in_progress || 0} In Progress</span>
+                          <span class="badge badge-subtle">${myTeamData?.teamProgress?.not_started || 0} Not Started</span>
+                          ${(myTeamData?.teamProgress?.overdue || 0) > 0 ? `<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${myTeamData.teamProgress.overdue} Overdue</span>` : ''}
+                        </div>
+                      `}
+                    </div>
+
+                    <!-- My Role & Work Completion -->
+                    <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <div>
+                          <div style="font-size: 11px; font-weight: 700; color: var(--color-primary); text-transform: uppercase;">My Project Role</div>
+                          <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 2px 0 0 0;">
+                            ${escapeHtml(myTeamData?.myRole?.role_title || (team.my_role === 'leader' ? 'Project Leader' : 'Team Member'))}
+                          </h4>
+                        </div>
+                        <span class="badge ${team.my_role === 'leader' ? 'badge-amber' : 'badge-indigo'}">
+                          ${team.my_role === 'leader' ? 'Team Leader' : 'Team Member'}
+                        </span>
+                      </div>
+
+                      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin: 0 0 10px 0;">
+                        ${escapeHtml(myTeamData?.myRole?.responsibilities || (team.my_role === 'leader' ? 'Lead architecture, assign team tasks, and coordinate with mentor.' : 'Complete assigned deliverables and contribute to milestones.'))}
+                      </p>
+
+                      <div style="border-top: 1px solid var(--border-light); padding-top: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+                        <span style="color: var(--text-muted);">
+                          My Work: <strong>${myTeamData?.individualProgress?.completed || 0}/${myTeamData?.individualProgress?.total || 0}</strong> tasks (${myTeamData?.individualProgress?.percentage || 0}%)
+                        </span>
+                        <button id="btn-goto-my-tasks" class="btn btn-xs btn-subtle" style="font-size: 11px;">
+                          View My Tasks <i class="fa-solid fa-arrow-right ml-1"></i>
                         </button>
-                      ` : ''}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- Two Action Cards (Applications & Smart Match) Side-by-Side (Matches Mockup) -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                  <!-- Card 1: Applications -->
-                  <div id="card-open-applications" class="card hover-lift" style="cursor: pointer; padding: 20px; border: 1px solid var(--border-color); border-radius: 14px; transition: all 0.2s;">
-                    <div style="display: flex; align-items: flex-start; gap: 14px;">
-                      <div style="width: 42px; height: 42px; border-radius: 10px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <i class="fa-solid fa-clipboard-list text-xl"></i>
-                      </div>
-                      <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                          <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0;">Applications</h4>
-                          ${pendingRequests.length > 0 ? `
-                            <span class="badge badge-amber text-xs">${pendingRequests.length} Pending</span>
-                          ` : ''}
+                  <!-- Two Action Cards (Applications & Smart Match) Side-by-Side (Matches Mockup) -->
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <!-- Card 1: Applications -->
+                    <div id="card-open-applications" class="card hover-lift" style="cursor: pointer; padding: 20px; border: 1px solid var(--border-color); border-radius: 14px; transition: all 0.2s;">
+                      <div style="display: flex; align-items: flex-start; gap: 14px;">
+                        <div style="width: 42px; height: 42px; border-radius: 10px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                          <i class="fa-solid fa-clipboard-list text-xl"></i>
                         </div>
-                        <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
-                          Review profiles and manually accept or reject applicants.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Card 2: Smart Match -->
-                  <div id="card-open-smart-match" class="card hover-lift" style="cursor: pointer; padding: 20px; border: 1px solid var(--border-color); border-radius: 14px; transition: all 0.2s;">
-                    <div style="display: flex; align-items: flex-start; gap: 14px;">
-                      <div style="width: 42px; height: 42px; border-radius: 10px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
-                      </div>
-                      <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                          <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0;">Smart Match</h4>
-                          <span class="badge badge-indigo text-xs">Fill Vacancies</span>
+                        <div style="flex: 1;">
+                          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0;">Applications</h4>
+                            ${pendingRequests.length > 0 ? `
+                              <span class="badge badge-amber text-xs">${pendingRequests.length} Pending</span>
+                            ` : ''}
+                          </div>
+                          <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+                            Review profiles and manually accept or reject applicants.
+                          </p>
                         </div>
-                        <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
-                          Find compatible students who fill missing team skills.
-                        </p>
+                      </div>
+                    </div>
+
+                    <!-- Card 2: Smart Match -->
+                    <div id="card-open-smart-match" class="card hover-lift" style="cursor: pointer; padding: 20px; border: 1px solid var(--border-color); border-radius: 14px; transition: all 0.2s;">
+                      <div style="display: flex; align-items: flex-start; gap: 14px;">
+                        <div style="width: 42px; height: 42px; border-radius: 10px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                          <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
+                        </div>
+                        <div style="flex: 1;">
+                          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0;">Smart Match</h4>
+                            <span class="badge badge-indigo text-xs">Fill Vacancies</span>
+                          </div>
+                          <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+                            Find compatible students who fill missing team skills.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- Team Skill Balance Section (Matches Mockup) -->
-                <div style="border: 1px solid var(--border-color); border-radius: 14px; padding: 20px 22px; margin-bottom: 24px;">
-                  <div style="margin-bottom: 14px;">
-                    <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
-                      Team Skill Balance
-                    </h4>
-                    <span style="font-size: 12px; color: var(--text-secondary);">
-                      Illustrative example of how the system identifies skill gaps.
-                    </span>
-                  </div>
+                  <!-- Team Skill Balance Section (Matches Mockup) -->
+                  <div style="border: 1px solid var(--border-color); border-radius: 14px; padding: 20px 22px; margin-bottom: 24px;">
+                    <div style="margin-bottom: 14px;">
+                      <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
+                        Team Skill Balance
+                      </h4>
+                      <span style="font-size: 12px; color: var(--text-secondary);">
+                        Illustrative example of how the system identifies skill gaps.
+                      </span>
+                    </div>
 
-                  <!-- Categories list with right-aligned status badges -->
-                  <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
-                    ${skillBalance.categories.map(cat => `
-                      <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background-color: var(--bg-subtle);">
-                        <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">
-                          ${escapeHtml(cat.name)}
-                        </span>
-                        <span class="badge ${cat.status === 'Covered' ? 'badge-emerald' : 'badge-amber'}" style="font-weight: 700; font-size: 11px;">
-                          ${escapeHtml(cat.status)}
-                        </span>
+                    <!-- Categories list with right-aligned status badges -->
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+                      ${skillBalance.categories.map(cat => `
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background-color: var(--bg-subtle);">
+                          <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">
+                            ${escapeHtml(cat.name)}
+                          </span>
+                          <span class="badge ${cat.status === 'Covered' ? 'badge-emerald' : 'badge-amber'}" style="font-weight: 700; font-size: 11px;">
+                            ${escapeHtml(cat.status)}
+                          </span>
+                        </div>
+                      `).join('')}
+                    </div>
+
+                    <!-- Recommended Next Step Callout Banner -->
+                    <div style="background-color: #EEF2FF; border-left: 4px solid #4338CA; border-radius: 8px; padding: 12px 16px;">
+                      <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12px; color: #4338CA; margin-bottom: 4px;">
+                        <i class="fa-regular fa-comment-dots"></i>
+                        <span>Recommended next step</span>
                       </div>
-                    `).join('')}
-                  </div>
-
-                  <!-- Recommended Next Step Callout Banner -->
-                  <div style="background-color: #EEF2FF; border-left: 4px solid #4338CA; border-radius: 8px; padding: 12px 16px;">
-                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12px; color: #4338CA; margin-bottom: 4px;">
-                      <i class="fa-regular fa-comment-dots"></i>
-                      <span>Recommended next step</span>
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                      ${escapeHtml(skillBalance.recommendedNextStep)}
+                      <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+                        ${escapeHtml(skillBalance.recommendedNextStep)}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- Mentor Information Bar -->
-                <div style="background-color: #EEF2FF; padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 10px;">
+                  <!-- Mentor Information Bar -->
+                  <div style="background-color: #EEF2FF; padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                      <span style="font-size: 11px; font-weight: 700; color: #4338CA; text-transform: uppercase; display: block;">Faculty Guide / Mentor</span>
+                      <strong style="color: var(--text-primary); font-size: 14px;">
+                        ${escapeHtml(team.faculty_name || 'Awaiting HOD Allocation')}
+                      </strong>
+                      ${team.faculty_email ? `<span style="font-size: 12px; color: var(--text-secondary); margin-left: 8px;">(${escapeHtml(team.faculty_email)})</span>` : ''}
+                    </div>
+                    ${team.faculty_id ? `
+                      <button class="btn btn-sm btn-subtle btn-inspect-team-fac" data-id="${team.faculty_id}">
+                        <i class="fa-solid fa-eye mr-1"></i> View Mentor
+                      </button>
+                    ` : ''}
+                  </div>
+
+                  <!-- Confirmed Team Members Roster -->
                   <div>
-                    <span style="font-size: 11px; font-weight: 700; color: #4338CA; text-transform: uppercase; display: block;">Faculty Guide / Mentor</span>
-                    <strong style="color: var(--text-primary); font-size: 14px;">
-                      ${escapeHtml(team.faculty_name || 'Awaiting HOD Allocation')}
-                    </strong>
-                    ${team.faculty_email ? `<span style="font-size: 12px; color: var(--text-secondary); margin-left: 8px;">(${escapeHtml(team.faculty_email)})</span>` : ''}
+                    <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0 0 12px 0;">
+                      Confirmed Team Members (${confirmedCount} / ${maxMembers})
+                    </h4>
+                    <div style="background-color: var(--bg-subtle); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light);">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                          <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-muted); background-color: #fff;">
+                            <th style="padding: 10px 14px;">Member</th>
+                            <th style="padding: 10px 14px;">Role & Title</th>
+                            <th style="padding: 10px 14px;">Strength / Skills</th>
+                            <th style="padding: 10px 14px;">Task Progress</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${members.map((m) => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                              <td style="padding: 10px 14px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                  <img src="${m.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}" alt="" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" />
+                                  <div>
+                                    <strong>${escapeHtml(m.name)}</strong>
+                                    <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(m.email)}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style="padding: 10px 14px;">
+                                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                                  <span class="badge ${m.team_role === 'leader' ? 'badge-amber' : 'badge-indigo'} text-xs">
+                                    ${escapeHtml(m.team_role)}
+                                  </span>
+                                  <strong>${escapeHtml(m.role_title || (m.team_role === 'leader' ? 'Project Leader' : 'Team Member'))}</strong>
+                                </div>
+                                ${m.responsibilities ? `
+                                  <div style="font-size: 11px; color: var(--text-secondary); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    ${escapeHtml(m.responsibilities)}
+                                  </div>
+                                ` : ''}
+                              </td>
+                              <td style="padding: 10px 14px;">
+                                <div style="text-transform: capitalize; font-weight: 600;">${escapeHtml(m.strength || 'Fullstack')}</div>
+                                <div style="font-size: 11px; color: var(--text-muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(m.languages || 'None')}</div>
+                              </td>
+                              <td style="padding: 10px 14px;">
+                                ${(m.total_tasks || 0) === 0 ? `
+                                  <span style="color: var(--text-muted); font-size: 11px;">No tasks assigned</span>
+                                ` : `
+                                  <div>
+                                    <span style="font-weight: 700; color: #4338CA;">${m.completed_tasks}/${m.total_tasks} completed</span>
+                                    <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">(${m.progress_percentage}%)</span>
+                                  </div>
+                                `}
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  ${team.faculty_id ? `
-                    <button class="btn btn-sm btn-subtle btn-inspect-team-fac" data-id="${team.faculty_id}">
-                      <i class="fa-solid fa-eye mr-1"></i> View Mentor
-                    </button>
-                  ` : ''}
-                </div>
+                ` : workspaceSection === 'tasks' ? `
+                  <!-- SECTION 2: TASKS & WORK COMPLETION -->
+                  <div>
+                    <!-- Tasks Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                      <div>
+                        <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px 0;">
+                          Tasks & Work Completion
+                        </h4>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                          Assign, execute, and verify completion of project milestones.
+                        </p>
+                      </div>
 
-                <!-- Confirmed Team Members Roster -->
-                <div>
-                  <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0 0 12px 0;">
-                    Confirmed Team Members (${confirmedCount} / ${maxMembers})
-                  </h4>
-                  <div style="background-color: var(--bg-subtle); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light);">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                      <thead>
-                        <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-muted); background-color: #fff;">
-                          <th style="padding: 10px 14px;">Member</th>
-                          <th style="padding: 10px 14px;">Reg No</th>
-                          <th style="padding: 10px 14px;">Strength</th>
-                          <th style="padding: 10px 14px;">Skills</th>
-                          <th style="padding: 10px 14px;">Role</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        ${members.map((m) => `
-                          <tr style="border-bottom: 1px solid var(--border-light);">
-                            <td style="padding: 10px 14px;">
-                              <div style="display: flex; align-items: center; gap: 8px;">
-                                <img src="${m.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}" alt="" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" />
-                                <div>
-                                  <strong>${escapeHtml(m.name)}</strong>
-                                  <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(m.email)}</div>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        ${isLeader ? `
+                          <button id="btn-open-create-task" class="btn btn-sm btn-primary">
+                            <i class="fa-solid fa-plus mr-1"></i> Create Task
+                          </button>
+                        ` : ''}
+                      </div>
+                    </div>
+
+                    <!-- Tasks Filter Buttons -->
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+                      <button class="btn btn-xs ${taskFilter === 'all' ? 'btn-primary' : 'btn-subtle'} btn-task-filter" data-filter="all">
+                        All Tasks (${(myTeamData?.tasks || []).length})
+                      </button>
+                      <button class="btn btn-xs ${taskFilter === 'my' ? 'btn-primary' : 'btn-subtle'} btn-task-filter" data-filter="my">
+                        My Tasks (${(myTeamData?.myTasks || []).length})
+                      </button>
+                      <button class="btn btn-xs ${taskFilter === 'in_progress' ? 'btn-primary' : 'btn-subtle'} btn-task-filter" data-filter="in_progress">
+                        In Progress (${(myTeamData?.tasks || []).filter(t => t.status === 'in_progress').length})
+                      </button>
+                      <button class="btn btn-xs ${taskFilter === 'completed' ? 'btn-primary' : 'btn-subtle'} btn-task-filter" data-filter="completed">
+                        Completed (${(myTeamData?.tasks || []).filter(t => t.status === 'completed').length})
+                      </button>
+                      <button class="btn btn-xs ${taskFilter === 'not_started' ? 'btn-primary' : 'btn-subtle'} btn-task-filter" data-filter="not_started">
+                        Not Started (${(myTeamData?.tasks || []).filter(t => t.status === 'not_started').length})
+                      </button>
+                    </div>
+
+                    <!-- Tasks List -->
+                    ${(() => {
+                      const allTasks = myTeamData?.tasks || [];
+                      const filtered = allTasks.filter(t => {
+                        if (taskFilter === 'my') return t.assigned_to === auth.user?.id;
+                        if (taskFilter === 'in_progress') return t.status === 'in_progress';
+                        if (taskFilter === 'completed') return t.status === 'completed';
+                        if (taskFilter === 'not_started') return t.status === 'not_started';
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return `
+                          <div class="card p-8 text-center text-muted" style="border: 1px dashed var(--border-color); background-color: var(--bg-subtle);">
+                            <i class="fa-solid fa-list-check text-3xl mb-2" style="color: var(--color-primary); opacity: 0.5;"></i>
+                            <h4 style="font-size: 15px; font-weight: 700; margin: 0 0 4px 0; color: var(--text-primary);">No tasks found</h4>
+                            <p style="font-size: 12px; margin: 0;">
+                              ${isLeader ? 'Click "+ Create Task" above to assign project deliverables to your team.' : 'No tasks assigned under this filter.'}
+                            </p>
+                          </div>
+                        `;
+                      }
+
+                      return `
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                          ${filtered.map(t => {
+                            const isMyTask = t.assigned_to === auth.user?.id;
+                            const canUpdate = isMyTask || isLeader;
+                            const overdue = isOverdue(t.deadline, t.status);
+
+                            return `
+                              <div class="card" style="padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 12px; background-color: #fff; transition: all 0.2s;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                                  <div style="flex: 1; min-width: 240px;">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                      ${t.status === 'completed' ? `
+                                        <span class="badge badge-emerald" style="font-size: 11px; font-weight: 700;">
+                                          <i class="fa-solid fa-check mr-1"></i> Completed
+                                        </span>
+                                      ` : t.status === 'in_progress' ? `
+                                        <span class="badge badge-amber" style="font-size: 11px; font-weight: 700;">
+                                          <i class="fa-solid fa-clock mr-1"></i> In Progress
+                                        </span>
+                                      ` : `
+                                        <span class="badge badge-subtle" style="font-size: 11px; font-weight: 700;">
+                                          Not Started
+                                        </span>
+                                      `}
+                                      ${overdue ? `
+                                        <span class="badge badge-danger" style="font-size: 11px; font-weight: 700;">
+                                          <i class="fa-solid fa-triangle-exclamation mr-1"></i> Overdue
+                                        </span>
+                                      ` : ''}
+                                      ${isMyTask ? `
+                                        <span class="badge badge-indigo" style="font-size: 10px; font-weight: 700;">
+                                          Assigned to You
+                                        </span>
+                                      ` : ''}
+                                    </div>
+                                    <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
+                                      ${escapeHtml(t.title)}
+                                    </h4>
+                                    ${t.description ? `
+                                      <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.4;">
+                                        ${escapeHtml(t.description)}
+                                      </p>
+                                    ` : ''}
+                                  </div>
+
+                                  <!-- Leader Edit / Delete Controls -->
+                                  ${isLeader ? `
+                                    <div style="display: flex; gap: 6px; align-items: center;">
+                                      <button class="btn btn-xs btn-subtle btn-edit-task" data-id="${t.id}" title="Edit Task">
+                                        <i class="fa-solid fa-pencil"></i>
+                                      </button>
+                                      <button class="btn btn-xs btn-danger btn-delete-task" data-id="${t.id}" title="Delete Task">
+                                        <i class="fa-solid fa-trash"></i>
+                                      </button>
+                                    </div>
+                                  ` : ''}
+                                </div>
+
+                                <!-- Assignee, Deadline & Status Actions Row -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); padding-top: 10px; flex-wrap: wrap; gap: 10px; font-size: 12px;">
+                                  <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                      <img src="${t.assigned_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}" alt="" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" />
+                                      <span style="color: var(--text-secondary);">
+                                        Assigned to: <strong style="color: var(--text-primary);">${escapeHtml(t.assigned_name || 'Unassigned')}</strong>
+                                      </span>
+                                    </div>
+                                    <div style="color: ${overdue ? '#DC2626' : 'var(--text-muted)'}; display: flex; align-items: center; gap: 4px;">
+                                      <i class="fa-regular fa-calendar"></i>
+                                      <span>Deadline: <strong>${formatDeadline(t.deadline)}</strong></span>
+                                    </div>
+                                  </div>
+
+                                  <!-- Work Status Transition Buttons -->
+                                  <div style="display: flex; align-items: center; gap: 6px;">
+                                    ${canUpdate ? `
+                                      ${t.status === 'not_started' ? `
+                                        <button class="btn btn-xs btn-primary btn-task-status-toggle" data-task-id="${t.id}" data-status="in_progress">
+                                          <i class="fa-solid fa-play mr-1"></i> Start Work
+                                        </button>
+                                        <button class="btn btn-xs btn-subtle btn-task-status-toggle" data-task-id="${t.id}" data-status="completed">
+                                          <i class="fa-solid fa-check mr-1"></i> Complete
+                                        </button>
+                                      ` : t.status === 'in_progress' ? `
+                                        <button class="btn btn-xs btn-emerald btn-task-status-toggle" data-task-id="${t.id}" data-status="completed" style="background-color: #10B981; color: #fff;">
+                                          <i class="fa-solid fa-check mr-1"></i> Mark Complete
+                                        </button>
+                                        <button class="btn btn-xs btn-subtle btn-task-status-toggle" data-task-id="${t.id}" data-status="not_started">
+                                          Reset
+                                        </button>
+                                      ` : `
+                                        <span style="font-size: 11px; font-weight: 700; color: #10B981;">
+                                          <i class="fa-solid fa-circle-check mr-1"></i> Done
+                                        </span>
+                                        <button class="btn btn-xs btn-subtle btn-task-status-toggle" data-task-id="${t.id}" data-status="in_progress" style="margin-left: 6px;">
+                                          Reopen
+                                        </button>
+                                      `}
+                                    ` : `
+                                      <span style="font-size: 11px; color: var(--text-muted); font-style: italic;">
+                                        Assigned to ${escapeHtml(t.assigned_name || 'teammate')}
+                                      </span>
+                                    `}
+                                  </div>
                                 </div>
                               </div>
-                            </td>
-                            <td style="padding: 10px 14px;">${escapeHtml(m.reg_no || 'N/A')}</td>
-                            <td style="padding: 10px 14px; text-transform: capitalize;">${escapeHtml(m.strength || 'Fullstack')}</td>
-                            <td style="padding: 10px 14px; color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(m.languages || 'None')}</td>
-                            <td style="padding: 10px 14px;">
-                              <span class="badge ${m.team_role === 'leader' ? 'badge-amber' : 'badge-indigo'} text-xs">
-                                ${escapeHtml(m.team_role)}
-                              </span>
-                            </td>
-                          </tr>
-                        `).join('')}
-                      </tbody>
-                    </table>
+                            `;
+                          }).join('')}
+                        </div>
+                      `;
+                    })()}
                   </div>
-                </div>
+                ` : workspaceSection === 'members' ? `
+                  <!-- SECTION 3: MEMBERS & ROLES -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                      <div>
+                        <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px 0;">
+                          Team Members & Roles
+                        </h4>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                          Assign specific project roles and review individual task completion.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+                      ${members.map(m => `
+                        <div class="card" style="padding: 18px 20px; border: 1px solid var(--border-color); border-radius: 12px; background-color: #fff;">
+                          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                              <img src="${m.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover;" />
+                              <div>
+                                <strong style="font-size: 15px; color: var(--text-primary); display: block;">
+                                  ${escapeHtml(m.name)}
+                                </strong>
+                                <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(m.email)}</span>
+                              </div>
+                            </div>
+                            <span class="badge ${m.team_role === 'leader' ? 'badge-amber' : 'badge-indigo'}">
+                              ${m.team_role === 'leader' ? 'Leader' : 'Member'}
+                            </span>
+                          </div>
+
+                          <div style="background-color: var(--bg-subtle); padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
+                            <div style="font-weight: 700; color: #4338CA; margin-bottom: 2px;">
+                              ${escapeHtml(m.role_title || (m.team_role === 'leader' ? 'Project Leader' : 'Team Member'))}
+                            </div>
+                            <p style="margin: 0; color: var(--text-secondary); line-height: 1.4;">
+                              ${escapeHtml(m.responsibilities || 'Responsible for contributing to core capstone modules and scheduled milestone deliverables.')}
+                            </p>
+                          </div>
+
+                          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary); margin-bottom: 10px;">
+                            <span>Individual Work Completion:</span>
+                            <strong style="color: #4338CA;">${m.completed_tasks || 0}/${m.total_tasks || 0} tasks (${m.progress_percentage || 0}%)</strong>
+                          </div>
+
+                          ${isLeader ? `
+                            <button class="btn btn-xs btn-subtle btn-assign-member-role" data-id="${m.id}" data-name="${escapeHtml(m.name)}" data-title="${escapeHtml(m.role_title || '')}" data-resp="${escapeHtml(m.responsibilities || '')}" style="width: 100%;">
+                              <i class="fa-solid fa-pencil mr-1"></i> Assign Role & Responsibilities
+                            </button>
+                          ` : ''}
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : `
+                  <!-- SECTION 4: TEAM CHAT & FILES -->
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+                    <!-- Team Chat Entry -->
+                    <div class="card" style="padding: 24px; border: 1px solid var(--border-color); border-radius: 14px; background-color: #fff;">
+                      <div style="width: 48px; height: 48px; border-radius: 12px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 14px;">
+                        <i class="fa-solid fa-comments"></i>
+                      </div>
+                      <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 6px 0;">
+                        Team & Mentor Group Chat
+                      </h4>
+                      <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 16px 0; line-height: 1.45;">
+                        Connect in real time with your confirmed team members and assigned faculty mentor for quick discussions and project updates.
+                      </p>
+                      <button id="btn-open-workspace-chat" class="btn btn-primary" style="width: 100%;">
+                        <i class="fa-solid fa-comment-dots mr-1"></i> Open Team & Mentor Chat
+                      </button>
+                    </div>
+
+                    <!-- Project Files & Deliverables Info -->
+                    <div class="card" style="padding: 24px; border: 1px solid var(--border-color); border-radius: 14px; background-color: #fff;">
+                      <div style="width: 48px; height: 48px; border-radius: 12px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 14px;">
+                        <i class="fa-solid fa-folder-open"></i>
+                      </div>
+                      <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 6px 0;">
+                        Project Files & Deliverables
+                      </h4>
+                      <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 16px 0; line-height: 1.45;">
+                        Deliverables, reports, and codebase repositories are submitted and verified directly in coordination with your assigned faculty guide during project milestone evaluations.
+                      </p>
+                      <div style="background-color: #F8FAFC; border: 1px dashed var(--border-color); border-radius: 10px; padding: 12px; font-size: 11px; color: var(--text-muted); text-align: center;">
+                        <i class="fa-solid fa-info-circle mr-1"></i> Repository sync handled during mentor review sessions.
+                      </div>
+                    </div>
+                  </div>
+                `}
               </div>
             ` : myTeamSubView === 'applications' ? `
               <!-- Sub-View: Applications -->
@@ -1333,6 +1902,108 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
     // Open Chat
     container.querySelector('#btn-open-team-chat-page')?.addEventListener('click', () => {
       navigate('student-chat');
+    });
+    container.querySelector('#btn-open-workspace-chat')?.addEventListener('click', () => {
+      if (team?.chat_group_id) {
+        navigate('student-chat', { initialGroupId: team.chat_group_id });
+      } else {
+        navigate('student-chat');
+      }
+    });
+
+    // Workspace Section Tabs
+    container.querySelector('#ws-tab-overview')?.addEventListener('click', () => {
+      workspaceSection = 'overview';
+      render();
+    });
+    container.querySelector('#ws-tab-tasks')?.addEventListener('click', () => {
+      workspaceSection = 'tasks';
+      render();
+    });
+    container.querySelector('#ws-tab-members')?.addEventListener('click', () => {
+      workspaceSection = 'members';
+      render();
+    });
+    container.querySelector('#ws-tab-files')?.addEventListener('click', () => {
+      workspaceSection = 'files';
+      render();
+    });
+
+    // Multi-Team Switcher
+    container.querySelectorAll('.btn-switch-team').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        selectedTeamId = Number(btn.dataset.id);
+        await loadData();
+      });
+    });
+
+    // Go to My Tasks shortcut from Overview
+    container.querySelector('#btn-goto-my-tasks')?.addEventListener('click', () => {
+      workspaceSection = 'tasks';
+      taskFilter = 'my';
+      render();
+    });
+
+    // Task Filter Tabs
+    container.querySelectorAll('.btn-task-filter').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        taskFilter = btn.dataset.filter;
+        render();
+      });
+    });
+
+    // Open Create Task Modal
+    container.querySelector('#btn-open-create-task')?.addEventListener('click', () => {
+      if (team) openCreateTaskModal(team);
+    });
+
+    // Open Edit Task Modal
+    container.querySelectorAll('.btn-edit-task').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const taskId = Number(btn.dataset.id);
+        const task = (myTeamData?.tasks || []).find(t => t.id === taskId);
+        if (task && team) openEditTaskModal(team, task);
+      });
+    });
+
+    // Delete Task
+    container.querySelectorAll('.btn-delete-task').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const taskId = Number(btn.dataset.id);
+        if (!confirm('Are you sure you want to delete this task?')) return;
+        try {
+          await api.deleteTeamTask(team.id, taskId);
+          await loadData();
+        } catch (err) {
+          alert(err.message || 'Failed to delete task.');
+        }
+      });
+    });
+
+    // Toggle Task Status (Start Work / Mark Complete / Reopen / Reset)
+    container.querySelectorAll('.btn-task-status-toggle').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const taskId = btn.dataset.taskId;
+        const newStatus = btn.dataset.status;
+        btn.disabled = true;
+        try {
+          await api.updateTaskStatus(team.id, taskId, newStatus);
+          await loadData();
+        } catch (err) {
+          alert(err.message || 'Failed to update task status.');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Assign Member Role & Responsibilities Modal
+    container.querySelectorAll('.btn-assign-member-role').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const memberId = Number(btn.dataset.id);
+        const member = (myTeamData?.members || []).find(m => m.id === memberId);
+        if (member && team) openAssignRoleModal(team, member);
+      });
     });
 
     // View Mentor Profile

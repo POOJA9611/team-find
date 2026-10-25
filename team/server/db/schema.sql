@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS team_members (
   team_id INTEGER NOT NULL,
   student_id INTEGER NOT NULL,
   role TEXT DEFAULT 'member' CHECK(role IN ('leader', 'member')),
+  role_title TEXT,
+  responsibilities TEXT,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (team_id, student_id),
   FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
@@ -99,6 +101,23 @@ CREATE TABLE IF NOT EXISTS team_join_requests (
   decided_at DATETIME NULLABLE,
   FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Team tasks (My Teams Workspace)
+CREATE TABLE IF NOT EXISTS team_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  assigned_to INTEGER NULLABLE,
+  deadline DATE NULLABLE,
+  status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started', 'in_progress', 'completed')),
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+  FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Team invitations

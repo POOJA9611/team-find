@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS team_members (
   team_id INT NOT NULL,
   student_id INT NOT NULL,
   role ENUM('leader', 'member') DEFAULT 'member',
+  role_title VARCHAR(150) DEFAULT NULL,
+  responsibilities TEXT DEFAULT NULL,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (team_id, student_id),
   CONSTRAINT fk_tm_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
@@ -113,6 +115,25 @@ CREATE TABLE IF NOT EXISTS team_join_requests (
   INDEX idx_tjr_student (student_id),
   CONSTRAINT fk_tjr_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
   CONSTRAINT fk_tjr_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6b. Team tasks (My Teams Workspace)
+CREATE TABLE IF NOT EXISTS team_tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  team_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT DEFAULT NULL,
+  assigned_to INT NULL DEFAULT NULL,
+  deadline DATE NULL DEFAULT NULL,
+  status ENUM('not_started', 'in_progress', 'completed') NOT NULL DEFAULT 'not_started',
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_tasks_team (team_id),
+  INDEX idx_tasks_assigned (assigned_to),
+  CONSTRAINT fk_task_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+  CONSTRAINT fk_task_assigned FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_task_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 7. Projects

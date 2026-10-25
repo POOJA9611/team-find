@@ -35,3 +35,6 @@ Thumbs.db
 # User uploaded dynamic content
 uploads/avatars/*
 !uploads/avatars/.gitkeep
+
+# Temporary test browser profiles
+tests/edge_*/
