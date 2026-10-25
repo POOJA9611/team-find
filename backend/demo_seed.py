@@ -330,6 +330,68 @@ def seed_demo_data():
             )
             print("  + Seeded 1 Pending Change Request for Ananya Iyer")
 
+    # 6. Seed Demo Invitations (Matching UI reference for Alex Chen)
+    if alex_id:
+        existing_alex_inv = db.get("SELECT id FROM team_invitations WHERE sender_id = ? OR recipient_id = ?", [alex_id, alex_id])
+        if not existing_alex_inv:
+            def get_or_create_team(t_name, l_id, p_title, fac_id=sj_id):
+                t = db.get("SELECT id FROM teams WHERE name = ?", [t_name])
+                if not t:
+                    res = db.run(
+                        "INSERT INTO teams (name, faculty_id, leader_id, created_by, project_title, status) VALUES (?, ?, ?, ?, ?, 'approved')",
+                        [t_name, fac_id, l_id, l_id, p_title]
+                    )
+                    t_id = res.lastID
+                    db.run("INSERT OR IGNORE INTO team_members (team_id, student_id, role) VALUES (?, ?, 'leader')", [t_id, l_id])
+                    return t_id
+                return t["id"]
+
+            smart_att_id = get_or_create_team("Smart Attendance System", alex_id, "Smart Attendance System")
+            campus_food_id = get_or_create_team("Campus Food Ordering App", alex_id, "Campus Food Ordering App")
+            lib_sys_id = get_or_create_team("Library Management System", alex_id, "Library Management System")
+
+            ai_bot_id = get_or_create_team("AI-Powered Chatbot", priya_id or alex_id, "AI-Powered Chatbot")
+            web_portal_id = get_or_create_team("Web Development Portal", student_ids.get("david.kim@student.edu") or alex_id, "Web Development Portal")
+            event_mgmt_id = get_or_create_team("College Event Management", student_ids.get("sneha.reddy@student.edu") or alex_id, "College Event Management")
+
+            sneha_id = student_ids.get("sneha.reddy@student.edu")
+            david_id = student_ids.get("david.kim@student.edu")
+
+            # Sent Invitations by Alex Chen
+            if sneha_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at) VALUES (?, ?, ?, ?, 'pending', '2026-10-24 10:32:00')",
+                    [smart_att_id, alex_id, sneha_id, "Would love to have your frontend experience on our Smart Attendance project."]
+                )
+            if david_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at, decided_at) VALUES (?, ?, ?, ?, 'accepted', '2026-10-22 16:15:00', '2026-10-22 17:00:00')",
+                    [campus_food_id, alex_id, david_id, "Please join us for database optimization on Campus Food Ordering."]
+                )
+            if ananya_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at, decided_at) VALUES (?, ?, ?, ?, 'rejected', '2026-10-20 11:45:00', '2026-10-20 12:30:00')",
+                    [lib_sys_id, alex_id, ananya_id, "We have an open spot for ML pipeline development."]
+                )
+
+            # Received Invitations for Alex Chen
+            if priya_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at) VALUES (?, ?, ?, ?, 'pending', '2026-10-25 14:20:00')",
+                    [ai_bot_id, priya_id, alex_id, "Hey Alex, we need a strong backend engineer for the AI Chatbot team!"]
+                )
+            if david_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at, decided_at) VALUES (?, ?, ?, ?, 'accepted', '2026-10-22 13:10:00', '2026-10-22 14:00:00')",
+                    [web_portal_id, david_id, alex_id, "Invite to collaborate on Web Development Portal."]
+                )
+            if sneha_id:
+                db.run(
+                    "INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status, created_at, decided_at) VALUES (?, ?, ?, ?, 'rejected', '2026-10-18 09:05:00', '2026-10-18 10:00:00')",
+                    [event_mgmt_id, sneha_id, alex_id, "Would you like to join the College Event Management system team?"]
+                )
+            print("  + Seeded Demo Team Invitations matching UI reference")
+
     print("\n🎉 Demo Data Seeding Completed Successfully!")
 
 

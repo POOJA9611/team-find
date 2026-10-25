@@ -975,7 +975,7 @@ def get_candidate_profile(student_id):
 def invite_to_team(team_id):
     try:
         data = request.get_json(silent=True) or {}
-        recipient_id = data.get("studentId") or data.get("recipientId")
+        recipient_id = data.get("studentId") or data.get("recipientId") or data.get("student_id") or data.get("recipient_id")
         message = data.get("message")
 
         if not recipient_id:
@@ -1033,7 +1033,8 @@ def invite_to_team(team_id):
 
         return jsonify({
             "message": f"Invitation successfully sent to {recipient['name']}.",
-            "invitationId": inv_id
+            "invitationId": inv_id,
+            "invitation_id": inv_id
         }), 201
 
     except Exception as error:
@@ -1051,7 +1052,9 @@ def get_my_invitations():
         student_id = g.user["id"]
 
         received = db.all(
-            """SELECT ti.*, t.name as team_name, t.project_title, t.domain, t.max_members,
+            """SELECT ti.*, 
+                      COALESCE(t.project_title, t.name) as project_title,
+                      t.name as team_name, t.domain, t.max_members,
                       u.name as sender_name, u.avatar as sender_avatar,
                       (SELECT COUNT(*) FROM team_members WHERE team_id = ti.team_id) as current_members_count
                FROM team_invitations ti
@@ -1063,12 +1066,17 @@ def get_my_invitations():
         )
 
         sent = db.all(
-            """SELECT ti.*, t.name as team_name, t.project_title,
+            """SELECT ti.*, 
+                      COALESCE(t.project_title, t.name) as project_title,
+                      t.name as team_name, t.domain, t.max_members,
+                      s.name as sender_name,
                       u.name as recipient_name, u.avatar as recipient_avatar,
-                      sp.reg_no as recipient_reg_no, sp.strength as recipient_strength, sp.languages as recipient_languages
+                      sp.reg_no as recipient_reg_no, sp.strength as recipient_strength, sp.languages as recipient_languages,
+                      (SELECT COUNT(*) FROM team_members WHERE team_id = ti.team_id) as current_members_count
                FROM team_invitations ti
                JOIN teams t ON ti.team_id = t.id
                JOIN users u ON ti.recipient_id = u.id
+               JOIN users s ON ti.sender_id = s.id
                LEFT JOIN student_profiles sp ON u.id = sp.user_id
                WHERE ti.sender_id = ? OR t.leader_id = ?
                ORDER BY ti.created_at DESC""",

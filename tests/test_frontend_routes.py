@@ -63,7 +63,7 @@ def test_frontend_routes():
     print(f"  ✅ 4. GET /api/health returns 200: {data}")
 
     # 5. SPA Fallback routing
-    spa_routes = ["/dashboard", "/assignments", "/my-students", "/project-teams"]
+    spa_routes = ["/dashboard", "/assignments", "/my-students", "/project-teams", "/invitations"]
     for route in spa_routes:
         res = client.get(route)
         assert res.status_code == 200, f"Expected 200 for SPA route {route}, got {res.status_code}"

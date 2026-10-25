@@ -25,7 +25,8 @@ import {
   renderStudentProfile,
   renderStudentProjectTeams,
   renderStudentFacultyDirectory,
-  renderStudentChangeRequest
+  renderStudentChangeRequest,
+  renderStudentInvitations
 } from './views/student_views.js';
 
 // Common Views
@@ -58,6 +59,7 @@ class Router {
       'faculty-profile': 'Faculty Academic Profile & Skills',
       'student-profile': 'Student Portfolio & Academic Projects',
       'project-teams': 'Capstone Project Teams & Collaboration',
+      'invitations': 'Project Team Invitations',
       'student-chat': 'My Team & Faculty Mentor Chat',
       'hod-team-requests': 'Project Team Proposals & Mentor Assignment',
       'faculty-directory': 'Browse Department Faculty Mentors',
@@ -199,6 +201,9 @@ class Router {
         case 'project-teams':
           renderStudentProjectTeams(container, viewCtx);
           break;
+        case 'invitations':
+          renderStudentInvitations(container, viewCtx);
+          break;
         case 'student-chat':
           renderChatView(container, {
             initialGroupId: this.targetChatGroupId || this.viewParams.initialGroupId
@@ -303,6 +308,11 @@ class Router {
           <button class="sidebar-nav-item" data-view="project-teams">
             <i class="fa-solid fa-people-group"></i>
             <span>Project Teams</span>
+          </button>
+          <button class="sidebar-nav-item" data-view="invitations">
+            <i class="fa-solid fa-envelope"></i>
+            <span>Invitations</span>
+            <span class="badge badge-indigo text-xs" style="margin-left: auto; padding: 2px 7px; font-size: 10px; font-weight: 700; border-radius: 10px;">New</span>
           </button>
           <button class="sidebar-nav-item" data-view="student-chat">
             <i class="fa-solid fa-comments"></i>

@@ -1783,3 +1783,418 @@ export async function renderStudentChangeRequest(container, { navigate, onOpenFa
 
 export const renderStudentProjectTeams = renderStudentTeams;
 export const renderStudentFacultyDirectory = renderFacultyDirectory;
+
+// 6. Student Invitations Workspace (Sent & Received Invitations)
+export async function renderStudentInvitations(container, { navigate, onOpenFacultyModal, viewParams = {} }) {
+  container.innerHTML = '<div class="p-8 text-center"><i class="fa-solid fa-spinner fa-spin text-2xl text-indigo"></i></div>';
+
+  let activeTab = viewParams.initialTab || 'all'; // 'all' | 'sent' | 'received'
+  let invitationsData = { sent: [], received: [] };
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatInvitationDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = d.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${day} ${month} ${year}, ${strHours}:${minutes} ${ampm}`;
+  }
+
+  const loadData = async () => {
+    try {
+      invitationsData = await api.getMyInvitations();
+      render();
+    } catch (err) {
+      container.innerHTML = `<div class="card p-8 text-center text-danger">${escapeHtml(err.message || 'Failed to load invitations.')}</div>`;
+    }
+  };
+
+  const openInvitationDetailModal = (inv, type) => {
+    const isSent = type === 'sent';
+    openModal({
+      title: 'Invitation Details',
+      maxWidth: '520px',
+      contentHtml: `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border-light); padding-bottom: 14px;">
+            <div>
+              <span style="font-size: 11px; font-weight: 700; color: var(--color-primary); text-transform: uppercase;">
+                ${escapeHtml(inv.domain || 'Project Team')}
+              </span>
+              <h3 style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 2px 0 2px 0;">
+                ${escapeHtml(inv.project_title || inv.team_name)}
+              </h3>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                Team: <strong>${escapeHtml(inv.team_name)}</strong>
+              </div>
+            </div>
+            <div>
+              ${inv.status === 'pending' ? `
+                <span class="badge badge-warning" style="padding: 6px 14px; border-radius: 20px; font-weight: 700;">
+                  <i class="fa-regular fa-clock mr-1"></i> Pending
+                </span>
+              ` : inv.status === 'accepted' ? `
+                <span class="badge badge-emerald" style="padding: 6px 14px; border-radius: 20px; font-weight: 700;">
+                  <i class="fa-solid fa-check mr-1"></i> Accepted
+                </span>
+              ` : `
+                <span class="badge badge-danger" style="padding: 6px 14px; border-radius: 20px; font-weight: 700;">
+                  <i class="fa-solid fa-xmark mr-1"></i> Rejected
+                </span>
+              `}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px;">
+            <div style="background-color: var(--bg-subtle); padding: 10px 14px; border-radius: 8px;">
+              <span style="font-size: 11px; color: var(--text-muted); display: block; font-weight: 700; text-transform: uppercase;">Sender</span>
+              <strong style="color: var(--text-primary);">${escapeHtml(inv.sender_name || 'Team Leader')}</strong>
+            </div>
+            <div style="background-color: var(--bg-subtle); padding: 10px 14px; border-radius: 8px;">
+              <span style="font-size: 11px; color: var(--text-muted); display: block; font-weight: 700; text-transform: uppercase;">Recipient</span>
+              <strong style="color: var(--text-primary);">${escapeHtml(inv.recipient_name || auth.user?.name)}</strong>
+            </div>
+          </div>
+
+          ${inv.message ? `
+            <div>
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 4px;">
+                Invitation Message
+              </span>
+              <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-left: 4px solid #4338CA; padding: 12px 14px; border-radius: 8px; font-size: 13px; color: var(--text-primary); font-style: italic; line-height: 1.45;">
+                "${escapeHtml(inv.message)}"
+              </div>
+            </div>
+          ` : ''}
+
+          <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-light); padding-top: 12px;">
+            <div><i class="fa-regular fa-calendar mr-1"></i> Sent On: <strong>${formatInvitationDate(inv.created_at)}</strong></div>
+            ${inv.decided_at ? `<div><i class="fa-solid fa-clock-rotate-left mr-1"></i> Decision On: <strong>${formatInvitationDate(inv.decided_at)}</strong></div>` : ''}
+          </div>
+
+          ${!isSent && inv.status === 'pending' ? `
+            <div style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border-light); padding-top: 14px;">
+              <button class="btn btn-sm btn-decide-invitation-modal" data-id="${inv.id}" data-action="reject" style="background-color: #FEE2E2; border: 1px solid #FECACA; color: #EF4444; font-weight: 700; padding: 7px 18px; border-radius: 8px; cursor: pointer;">
+                <i class="fa-solid fa-xmark mr-1"></i> Reject
+              </button>
+              <button class="btn btn-sm btn-decide-invitation-modal" data-id="${inv.id}" data-action="accept" style="background-color: #10B981; border: 1px solid #10B981; color: #fff; font-weight: 700; padding: 7px 18px; border-radius: 8px; cursor: pointer;">
+                <i class="fa-solid fa-check mr-1"></i> Accept
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.btn-decide-invitation-modal').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const invId = btn.dataset.id;
+        const action = btn.dataset.action;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        try {
+          const res = await api.decideTeamInvitation(invId, action);
+          alert(res.message || `Invitation successfully ${action === 'accept' ? 'accepted' : 'rejected'}!`);
+          document.querySelector('.modal-backdrop-layer')?.remove();
+          loadData();
+        } catch (err) {
+          alert(err.message || 'Failed to process invitation.');
+          btn.disabled = false;
+          btn.textContent = action === 'accept' ? 'Accept' : 'Reject';
+        }
+      });
+    });
+  };
+
+  const render = () => {
+    const sentList = invitationsData.sent || [];
+    const receivedList = invitationsData.received || [];
+
+    container.innerHTML = `
+      <div style="max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+        <!-- Header Card -->
+        <div class="card" style="padding: 22px 26px; border-radius: 16px;">
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(67, 56, 202, 0.12);">
+              <i class="fa-solid fa-envelope"></i>
+            </div>
+            <div>
+              <h2 style="font-size: 22px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0; letter-spacing: -0.3px;">
+                Invitations
+              </h2>
+              <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                View and manage your project team invitations.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Selector Row -->
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button id="tab-sent-invitations" class="btn btn-sm ${activeTab === 'sent' || activeTab === 'all' ? 'btn-primary' : 'btn-subtle'}" style="${activeTab === 'sent' ? 'background-color: #fff; color: #4338CA; border: 1px solid var(--border-color); font-weight: 700; box-shadow: var(--shadow-sm);' : 'background-color: #F8FAFC; color: var(--text-secondary); border: 1px solid var(--border-color);'}">
+            <i class="fa-solid fa-paper-plane mr-2" style="color: ${activeTab === 'sent' ? '#4338CA' : 'inherit'};"></i>
+            <span>Sent Invitations</span>
+            <span class="badge ${activeTab === 'sent' ? 'badge-indigo' : 'badge-subtle'}" style="margin-left: 8px; border-radius: 12px; font-size: 11px;">${sentList.length}</span>
+          </button>
+
+          <button id="tab-received-invitations" class="btn btn-sm ${activeTab === 'received' ? 'btn-primary' : 'btn-subtle'}" style="${activeTab === 'received' ? 'background-color: #fff; color: #4338CA; border: 1px solid var(--border-color); font-weight: 700; box-shadow: var(--shadow-sm);' : 'background-color: #F8FAFC; color: var(--text-secondary); border: 1px solid var(--border-color);'}">
+            <i class="fa-solid fa-inbox mr-2" style="color: ${activeTab === 'received' ? '#4338CA' : 'inherit'};"></i>
+            <span>Received Invitations</span>
+            <span class="badge ${activeTab === 'received' ? 'badge-indigo' : 'badge-subtle'}" style="margin-left: 8px; border-radius: 12px; font-size: 11px;">${receivedList.length}</span>
+          </button>
+
+          <button id="tab-all-invitations" class="btn btn-sm ${activeTab === 'all' ? 'btn-primary' : 'btn-subtle'}" style="${activeTab === 'all' ? 'background-color: #fff; color: #4338CA; border: 1px solid var(--border-color); font-weight: 700; box-shadow: var(--shadow-sm);' : 'background-color: #F8FAFC; color: var(--text-secondary); border: 1px solid var(--border-color);'}">
+            <span>View Both</span>
+          </button>
+        </div>
+
+        <!-- Section 1: Sent Invitations (Visible if 'sent' or 'all') -->
+        ${activeTab === 'sent' || activeTab === 'all' ? `
+          <div id="inv-section-sent" class="card" style="padding: 24px; border-radius: 16px;">
+            <div style="margin-bottom: 18px;">
+              <h3 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
+                Sent Invitations
+              </h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                Track the status of invitations you have sent to other students.
+              </p>
+            </div>
+
+            ${sentList.length === 0 ? `
+              <div style="padding: 36px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 12px; background-color: var(--bg-subtle);">
+                <i class="fa-solid fa-paper-plane text-2xl mb-2" style="opacity: 0.4;"></i>
+                <h4 style="font-size: 14px; font-weight: 700; margin: 0 0 4px 0; color: var(--text-primary);">No sent invitations</h4>
+                <p style="font-size: 12px; margin: 0;">When you invite students to fill vacancies from Find Members, they will appear here.</p>
+              </div>
+            ` : `
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${sentList.map(inv => `
+                  <div class="invitation-row-card hover-lift" data-id="${inv.id}" data-type="sent" style="padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 14px; background-color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; transition: all 0.2s; cursor: pointer;">
+                    <div style="display: flex; align-items: center; gap: 16px; flex: 1; min-width: 240px;">
+                      <div style="width: 44px; height: 44px; border-radius: 12px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
+                        <i class="fa-solid fa-users"></i>
+                      </div>
+                      <div>
+                        <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px 0;">
+                          ${escapeHtml(inv.project_title || inv.team_name)}
+                        </h4>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 3px;">
+                          Project Team
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px;">
+                          <i class="fa-solid fa-user text-xs"></i>
+                          <span>To: <strong>${escapeHtml(inv.recipient_name)}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+                      <div style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted);">
+                        <i class="fa-regular fa-calendar"></i>
+                        <span>Sent on ${formatInvitationDate(inv.created_at)}</span>
+                      </div>
+
+                      <div>
+                        ${inv.status === 'pending' ? `
+                          <span class="badge badge-warning" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #FEF3C7; color: #D97706;">
+                            <i class="fa-regular fa-clock"></i> Pending
+                          </span>
+                        ` : inv.status === 'accepted' ? `
+                          <span class="badge badge-emerald" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #DCFCE7; color: #16A34A;">
+                            <i class="fa-solid fa-check"></i> Accepted
+                          </span>
+                        ` : `
+                          <span class="badge badge-danger" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #FEE2E2; color: #DC2626;">
+                            <i class="fa-solid fa-xmark"></i> Rejected
+                          </span>
+                        `}
+                      </div>
+
+                      <button class="btn-view-inv-details" data-id="${inv.id}" data-type="sent" style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; display: flex; align-items: center;" title="View Details">
+                        <i class="fa-solid fa-chevron-right text-sm"></i>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        ` : ''}
+
+        <!-- Section 2: Received Invitations (Visible if 'received' or 'all') -->
+        ${activeTab === 'received' || activeTab === 'all' ? `
+          <div id="inv-section-received" class="card" style="padding: 24px; border-radius: 16px;">
+            <div style="margin-bottom: 18px;">
+              <h3 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">
+                Received Invitations
+              </h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                Respond to invitations from team leaders and other students.
+              </p>
+            </div>
+
+            ${receivedList.length === 0 ? `
+              <div style="padding: 36px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 12px; background-color: var(--bg-subtle);">
+                <i class="fa-solid fa-inbox text-2xl mb-2" style="opacity: 0.4;"></i>
+                <h4 style="font-size: 14px; font-weight: 700; margin: 0 0 4px 0; color: var(--text-primary);">No received invitations</h4>
+                <p style="font-size: 12px; margin: 0;">You have not received any invitations to join project teams yet.</p>
+              </div>
+            ` : `
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${receivedList.map(inv => `
+                  <div class="invitation-row-card hover-lift" data-id="${inv.id}" data-type="received" style="padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 14px; background-color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; transition: all 0.2s; cursor: pointer;">
+                    <div style="display: flex; align-items: center; gap: 16px; flex: 1; min-width: 240px;">
+                      <div style="width: 44px; height: 44px; border-radius: 12px; background-color: #EEF2FF; color: #4338CA; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
+                        <i class="fa-solid fa-users"></i>
+                      </div>
+                      <div>
+                        <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px 0;">
+                          ${escapeHtml(inv.project_title || inv.team_name)}
+                        </h4>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 3px;">
+                          Project Team
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px;">
+                          <i class="fa-solid fa-user text-xs"></i>
+                          <span>From: <strong>${escapeHtml(inv.sender_name)}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                      <div style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted);">
+                        <i class="fa-regular fa-calendar"></i>
+                        <span>Received on ${formatInvitationDate(inv.created_at)}</span>
+                      </div>
+
+                      <div>
+                        ${inv.status === 'pending' ? `
+                          <span class="badge badge-warning" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #FEF3C7; color: #D97706;">
+                            <i class="fa-regular fa-clock"></i> Pending
+                          </span>
+                        ` : inv.status === 'accepted' ? `
+                          <span class="badge badge-emerald" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #DCFCE7; color: #16A34A;">
+                            <i class="fa-solid fa-check"></i> Accepted
+                          </span>
+                        ` : `
+                          <span class="badge badge-danger" style="padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; background-color: #FEE2E2; color: #DC2626;">
+                            <i class="fa-solid fa-xmark"></i> Rejected
+                          </span>
+                        `}
+                      </div>
+
+                      ${inv.status === 'pending' ? `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <button class="btn btn-sm btn-action-inv btn-inv-accept" data-id="${inv.id}" data-action="accept" data-team="${escapeHtml(inv.team_name)}" style="background-color: #10B981; border: 1px solid #10B981; color: #fff; font-weight: 700; padding: 6px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <i class="fa-solid fa-check"></i> Accept
+                          </button>
+                          <button class="btn btn-sm btn-action-inv btn-inv-reject" data-id="${inv.id}" data-action="reject" data-team="${escapeHtml(inv.team_name)}" style="background-color: #FEE2E2; border: 1px solid #FECACA; color: #EF4444; font-weight: 700; padding: 6px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <i class="fa-solid fa-xmark"></i> Reject
+                          </button>
+                        </div>
+                      ` : `
+                        <button class="btn-view-inv-details" data-id="${inv.id}" data-type="received" style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; display: flex; align-items: center;" title="View Details">
+                          <i class="fa-solid fa-chevron-right text-sm"></i>
+                        </button>
+                      `}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        ` : ''}
+
+        <!-- Bottom Informational Banner (Matching Reference) -->
+        <div style="background-color: #EEF2FF; border: 1px solid #E0E7FF; border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #4338CA;">
+          <i class="fa-solid fa-circle-info text-base" style="flex-shrink: 0;"></i>
+          <span>You can only accept or reject invitations received from other students. Sent invitations can only be tracked, not modified.</span>
+        </div>
+      </div>
+    `;
+
+    // Tab Event Listeners
+    container.querySelector('#tab-sent-invitations')?.addEventListener('click', () => {
+      activeTab = 'sent';
+      render();
+    });
+    container.querySelector('#tab-received-invitations')?.addEventListener('click', () => {
+      activeTab = 'received';
+      render();
+    });
+    container.querySelector('#tab-all-invitations')?.addEventListener('click', () => {
+      activeTab = 'all';
+      render();
+    });
+
+    // Accept / Reject Actions
+    container.querySelectorAll('.btn-action-inv').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const invId = btn.dataset.id;
+        const action = btn.dataset.action;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        try {
+          const res = await api.decideTeamInvitation(invId, action);
+          alert(res.message || `Invitation successfully ${action === 'accept' ? 'accepted' : 'rejected'}!`);
+          await loadData();
+        } catch (err) {
+          alert(err.message || 'Failed to process invitation.');
+          await loadData();
+        }
+      });
+    });
+
+    // View Details Click Handlers
+    container.querySelectorAll('.btn-view-inv-details').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const invId = Number(btn.dataset.id);
+        const type = btn.dataset.type;
+        const list = type === 'sent' ? sentList : receivedList;
+        const item = list.find(i => i.id === invId);
+        if (item) {
+          openInvitationDetailModal(item, type);
+        }
+      });
+    });
+
+    // Card Row Click (opens modal)
+    container.querySelectorAll('.invitation-row-card').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const invId = Number(card.dataset.id);
+        const type = card.dataset.type;
+        const list = type === 'sent' ? sentList : receivedList;
+        const item = list.find(i => i.id === invId);
+        if (item) {
+          openInvitationDetailModal(item, type);
+        }
+      });
+    });
+  };
+
+  loadData();
+}
