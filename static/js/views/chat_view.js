@@ -63,7 +63,7 @@ export async function renderChatView(container, options = {}) {
 
 function renderWorkspace(container) {
   const activeGroup = currentGroups.find(g => g.id === activeGroupId) || currentGroups[0];
-  const isConnected = socketManager.isConnected();
+  const isConnected = typeof socketManager?.isConnected === 'function' ? socketManager.isConnected() : Boolean(socketManager?.isConnected);
 
   container.innerHTML = `
     <div

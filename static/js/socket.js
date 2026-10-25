@@ -7,7 +7,7 @@ import auth from './auth.js';
 class SocketManager {
   constructor() {
     this.socket = null;
-    this.isConnected = false;
+    this._isConnected = false;
     this.messageListeners = [];
   }
 
@@ -38,12 +38,12 @@ class SocketManager {
 
     this.socket.on('connect', () => {
       console.log('⚡ Socket connected to server');
-      this.isConnected = true;
+      this._isConnected = true;
     });
 
     this.socket.on('disconnect', () => {
       console.log('🔌 Socket disconnected');
-      this.isConnected = false;
+      this._isConnected = false;
     });
 
     this.socket.on('new_notification', (notification) => {
@@ -83,7 +83,7 @@ class SocketManager {
       this.socket.disconnect();
       this.socket = null;
     }
-    this.isConnected = false;
+    this._isConnected = false;
   }
 
   getSocket() {
@@ -91,7 +91,7 @@ class SocketManager {
   }
 
   isConnected() {
-    return !!this.isConnected;
+    return Boolean(this._isConnected && this.socket && this.socket.connected);
   }
 
   onNotification(callback) {
@@ -112,19 +112,19 @@ class SocketManager {
   }
 
   joinGroup(groupId, callback) {
-    if (this.socket && this.isConnected) {
+    if (this.socket && this.isConnected()) {
       this.socket.emit('join_group', { groupId: Number(groupId) }, callback);
     }
   }
 
   leaveGroup(groupId) {
-    if (this.socket && this.isConnected) {
+    if (this.socket && this.isConnected()) {
       this.socket.emit('leave_group', { groupId: Number(groupId) });
     }
   }
 
   sendChatMessage(groupId, body, callback) {
-    if (this.socket && this.isConnected) {
+    if (this.socket && this.isConnected()) {
       this.socket.emit('chat_message', { groupId: Number(groupId), body }, callback);
     }
   }
