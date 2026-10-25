@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS team_join_requests (
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Team invitations
+CREATE TABLE IF NOT EXISTS team_invitations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  sender_id INTEGER NOT NULL,
+  recipient_id INTEGER NOT NULL,
+  message TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'rejected')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  decided_at DATETIME NULLABLE,
+  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Projects
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -189,6 +189,19 @@ export const api = {
     request(`/teams/${teamId}/members/${studentId}`, {
       method: 'DELETE'
     }),
+  getTeamCandidates: (teamId) => request(`/teams/${teamId}/candidates`),
+  getCandidateProfile: (studentId) => request(`/teams/candidate-profile/${studentId}`),
+  sendTeamInvitation: (teamId, studentId, message) =>
+    request(`/teams/${teamId}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ studentId, message })
+    }),
+  getMyInvitations: () => request('/teams/my-invitations'),
+  decideTeamInvitation: (invitationId, action) =>
+    request(`/teams/invitations/${invitationId}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ action })
+    }),
 
   // Chat
   getChatGroups: () => request('/chat/groups'),

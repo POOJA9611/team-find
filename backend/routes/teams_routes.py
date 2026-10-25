@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g, current_app
 from backend.database import get_db
 from backend.middleware.auth import authenticate_token, require_role
 from backend.utils.validators import sanitize_string
-from backend.utils.recommendations import calculate_student_team_match
+from backend.utils.recommendations import calculate_student_team_match, tokenize
 from backend.routes.notifications_routes import create_system_notification
 
 teams_bp = Blueprint("teams", __name__)
@@ -87,6 +87,51 @@ def get_teams():
         return jsonify({"error": "Failed to retrieve teams."}), 500
 
 
+def analyze_team_skill_balance(team: dict, members: list):
+    """
+    Analyzes confirmed team members' competencies against core capstone project dimensions.
+    Returns categorized status (Covered vs Needed) and a tailored recommendation next step.
+    """
+    combined_languages = " ".join([(m.get("languages") or "") for m in members]).lower()
+    strengths = [(m.get("strength") or "").lower() for m in members]
+
+    has_backend = any(s in ("backend", "fullstack") for s in strengths) or any(
+        k in combined_languages for k in ("python", "node", "java", "flask", "django", "express", "c++", "go", "backend")
+    )
+
+    has_frontend = any(s in ("frontend", "fullstack") for s in strengths) or any(
+        k in combined_languages for k in ("react", "javascript", "js", "html", "css", "vue", "angular", "typescript", "frontend", "ui")
+    )
+
+    has_database = any(
+        k in combined_languages for k in ("sql", "mysql", "postgres", "mongodb", "sqlite", "redis", "database")
+    ) or (has_backend and len(members) >= 2)
+
+    has_testing = any(
+        k in combined_languages for k in ("test", "testing", "qa", "docker", "devops", "ci/cd", "cloud", "aws", "git")
+    ) or (any(s == "fullstack" for s in strengths) and len(members) >= 3)
+
+    categories = [
+        {"name": "Python / Backend", "status": "Covered" if has_backend else "Needed"},
+        {"name": "Frontend / UI", "status": "Covered" if has_frontend else "Needed"},
+        {"name": "Testing / QA", "status": "Covered" if has_testing else "Needed"},
+        {"name": "Database", "status": "Covered" if has_database else "Needed"},
+    ]
+
+    needed_names = [c["name"] for c in categories if c["status"] == "Needed"]
+    if needed_names:
+        needed_str = " and ".join(needed_names) if len(needed_names) <= 2 else ", ".join(needed_names[:-1]) + f", and {needed_names[-1]}"
+        recommended_step = f"Prioritize students who can contribute {needed_str} skills, while also checking project compatibility and teamwork fit."
+    else:
+        recommended_step = "All core technical competencies are well-covered. Prioritize students with strong domain interest and proven collaboration skills."
+
+    return {
+        "categories": categories,
+        "recommendedNextStep": recommended_step,
+        "neededCategories": needed_names
+    }
+
+
 # 2. Get My Team Details
 @teams_bp.route("/my-team", methods=["GET"])
 @authenticate_token
@@ -114,11 +159,12 @@ def get_my_team():
 
         members = []
         incoming_requests = []
+        skill_balance = None
 
         if team:
             members = db.all(
                 """SELECT u.id, u.name, u.email, u.avatar, tm.role as team_role, tm.joined_at,
-                          sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department
+                          sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.bio
                    FROM team_members tm
                    JOIN users u ON tm.student_id = u.id
                    LEFT JOIN student_profiles sp ON u.id = sp.user_id
@@ -126,6 +172,18 @@ def get_my_team():
                    ORDER BY (CASE WHEN tm.role = 'leader' THEN 0 ELSE 1 END), u.name ASC""",
                 [team["id"]]
             )
+
+            confirmed_count = len(members)
+            max_members = team.get("max_members") or 4
+            vacancies = max(0, max_members - confirmed_count)
+            is_full = confirmed_count >= max_members
+
+            team["confirmed_members"] = confirmed_count
+            team["vacancies"] = vacancies
+            team["is_full"] = is_full
+
+            skill_balance = analyze_team_skill_balance(team, members)
+            team["skill_balance"] = skill_balance
 
             if team.get("leader_id") == student_id or team.get("my_role") == "leader":
                 incoming_requests = db.all(
@@ -139,10 +197,25 @@ def get_my_team():
                     [team["id"]]
                 )
 
+                for req in incoming_requests:
+                    req_student = {
+                        "id": req["student_id"],
+                        "name": req["student_name"],
+                        "languages": req.get("languages") or "",
+                        "strength": req.get("strength") or "fullstack",
+                        "bio": req.get("bio") or "",
+                        "department": req.get("department") or ""
+                    }
+                    match_res = calculate_student_team_match(req_student, team, members)
+                    req["compatibility_score"] = match_res["score"]
+                    req["match_explanation"] = match_res["explanation"]
+                    req["matched_skills"] = match_res["matchedTech"]
+
         return jsonify({
             "team": team,
             "members": members,
-            "incomingRequests": incoming_requests
+            "incomingRequests": incoming_requests,
+            "skillBalance": skill_balance
         })
 
     except Exception as error:
@@ -251,7 +324,8 @@ def create_team_proposal():
         new_team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
         return jsonify({
             "message": "Project team proposal submitted successfully. It is now awaiting HOD review.",
-            "team": new_team
+            "team": new_team,
+            "teamId": team_id
         }), 201
 
     except Exception as error:
@@ -664,3 +738,456 @@ def remove_team_member(team_id, student_id):
     except Exception as error:
         print("Remove team member error:", error)
         return jsonify({"error": "Failed to remove student from team."}), 500
+
+
+def evaluate_candidate_for_team(candidate: dict, team: dict, members: list, needed_categories: list):
+    """
+    Evaluates candidate compatibility against project requirements and team skill balance gaps.
+    Calculates Project Compatibility %, Team Compatibility %, and Overall Compatibility %.
+    """
+    # 1. Project compatibility (using actual candidate profile vs project details)
+    project_match = calculate_student_team_match(candidate, team, members)
+    project_score = project_match.get("score") or 50
+
+    # Matching skills
+    team_tech = tokenize(team.get("technologies") or "")
+    team_skills = tokenize(team.get("required_skills") or "")
+    combined_target = set(team_tech + team_skills)
+
+    cand_langs = tokenize(candidate.get("languages") or "")
+    cand_strength = (candidate.get("strength") or "").lower()
+
+    matching_skills = []
+    for target in combined_target:
+        if any(target in l or l in target for l in cand_langs):
+            matching_skills.append(target.title())
+
+    if not matching_skills and cand_langs:
+        proj_text = f"{team.get('project_title', '')} {team.get('domain', '')}".lower()
+        for l in cand_langs:
+            if l in proj_text:
+                matching_skills.append(l.title())
+
+    if not matching_skills and cand_langs:
+        matching_skills = [l.title() for l in cand_langs[:2]]
+
+    # 2. Missing team skills contributed
+    cand_langs_str = " ".join(cand_langs)
+    cand_bio = (candidate.get("bio") or "").lower()
+
+    cand_has_backend = cand_strength in ("backend", "fullstack") or any(
+        k in cand_langs_str for k in ("python", "node", "java", "flask", "django", "express", "c++", "go", "backend")
+    )
+    cand_has_frontend = cand_strength in ("frontend", "fullstack") or any(
+        k in cand_langs_str for k in ("react", "javascript", "js", "html", "css", "vue", "angular", "typescript", "frontend", "ui")
+    )
+    cand_has_testing = any(
+        k in cand_langs_str or k in cand_bio for k in ("test", "testing", "qa", "docker", "devops", "ci/cd", "cloud", "aws", "git")
+    )
+    cand_has_database = any(
+        k in cand_langs_str for k in ("sql", "mysql", "postgres", "mongodb", "sqlite", "redis", "database")
+    )
+
+    missing_contributed = []
+    if "Python / Backend" in needed_categories and cand_has_backend:
+        missing_contributed.append("Python / Backend")
+    if "Frontend / UI" in needed_categories and cand_has_frontend:
+        missing_contributed.append("Frontend / UI")
+    if "Testing / QA" in needed_categories and cand_has_testing:
+        missing_contributed.append("Testing / QA")
+    if "Database" in needed_categories and cand_has_database:
+        missing_contributed.append("Database")
+
+    # 3. Team compatibility score (evaluating complementary skill balance)
+    if not needed_categories:
+        team_score = 90 if cand_strength == "fullstack" else 84
+    else:
+        fill_ratio = len(missing_contributed) / max(1, len(needed_categories))
+        team_score = round(45.0 + fill_ratio * 50.0)
+        if cand_strength == "fullstack":
+            team_score = min(98, team_score + 5)
+
+    # 4. Overall compatibility score (weighted combination)
+    overall_score = min(99, max(20, round(0.55 * project_score + 0.45 * team_score)))
+
+    return {
+        "projectCompatibility": project_score,
+        "teamCompatibility": team_score,
+        "overallCompatibility": overall_score,
+        "matchingSkills": matching_skills,
+        "missingSkillsContributed": missing_contributed,
+        "explanation": project_match.get("explanation") or "Compatible candidate profile."
+    }
+
+
+# 11. Candidate Recommendations for Team Vacancies (Smart Match / Find Members)
+@teams_bp.route("/<int:team_id>/candidates", methods=["GET"])
+@authenticate_token
+@require_role("student")
+def get_team_candidates(team_id):
+    try:
+        db = get_db()
+        student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        # Only leader can access candidate recommendations
+        is_leader = team["leader_id"] == student_id or db.get(
+            "SELECT team_id FROM team_members WHERE team_id = ? AND student_id = ? AND role = 'leader'",
+            [team_id, student_id]
+        )
+        if not is_leader:
+            return jsonify({"error": "Only the team leader can access candidate recommendations."}), 403
+
+        members = db.all(
+            """SELECT u.id, u.name, u.email, u.avatar, tm.role as team_role,
+                      sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.bio
+               FROM team_members tm
+               JOIN users u ON tm.student_id = u.id
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE tm.team_id = ?""",
+            [team_id]
+        )
+
+        max_members = team.get("max_members") or 4
+        confirmed_count = len(members)
+        vacancies = max(0, max_members - confirmed_count)
+
+        skill_balance = analyze_team_skill_balance(team, members)
+        needed_categories = skill_balance.get("neededCategories", [])
+
+        if vacancies == 0:
+            return jsonify({
+                "candidates": [],
+                "vacancies": 0,
+                "confirmed_count": confirmed_count,
+                "max_members": max_members,
+                "is_full": True,
+                "skillBalance": skill_balance,
+                "message": "Team Complete. All member slots have been filled."
+            })
+
+        # Fetch eligible students excluding current confirmed team members
+        potential_students = db.all(
+            """SELECT u.id, u.name, u.email, u.avatar,
+                      sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.bio
+               FROM users u
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE u.role = 'student'
+                 AND u.id NOT IN (SELECT student_id FROM team_members WHERE team_id = ?)
+               ORDER BY u.name ASC""",
+            [team_id]
+        )
+
+        # Get existing invitation statuses for this team
+        invitations = db.all(
+            "SELECT recipient_id, status FROM team_invitations WHERE team_id = ?",
+            [team_id]
+        )
+        invitation_map = {inv["recipient_id"]: inv["status"] for inv in invitations}
+
+        candidates = []
+        for cand in potential_students:
+            inv_status = invitation_map.get(cand["id"])
+            eval_res = evaluate_candidate_for_team(cand, team, members, needed_categories)
+
+            candidates.append({
+                "id": cand["id"],
+                "name": cand["name"],
+                "email": cand["email"],
+                "avatar": cand["avatar"],
+                "reg_no": cand.get("reg_no") or "N/A",
+                "strength": cand.get("strength") or "fullstack",
+                "languages": cand.get("languages") or "",
+                "cgpa": cand.get("cgpa"),
+                "department": cand.get("department") or "Computer Science",
+                "bio": cand.get("bio") or "",
+                "projectCompatibility": eval_res["projectCompatibility"],
+                "teamCompatibility": eval_res["teamCompatibility"],
+                "overallCompatibility": eval_res["overallCompatibility"],
+                "matchingSkills": eval_res["matchingSkills"],
+                "missingSkillsContributed": eval_res["missingSkillsContributed"],
+                "matchExplanation": eval_res["explanation"],
+                "invitationStatus": inv_status
+            })
+
+        # Rank candidates from highest to lowest overall compatibility
+        candidates.sort(key=lambda c: c["overallCompatibility"], reverse=True)
+
+        return jsonify({
+            "candidates": candidates,
+            "vacancies": vacancies,
+            "confirmed_count": confirmed_count,
+            "max_members": max_members,
+            "is_full": False,
+            "skillBalance": skill_balance
+        })
+
+    except Exception as error:
+        print("Get team candidates error:", error)
+        return jsonify({"error": "Failed to retrieve candidate recommendations."}), 500
+
+
+# 12. Candidate Detailed Profile
+@teams_bp.route("/candidate-profile/<int:student_id>", methods=["GET"])
+@authenticate_token
+@require_role("student")
+def get_candidate_profile(student_id):
+    try:
+        db = get_db()
+        student = db.get(
+            """SELECT u.id, u.name, u.email, u.avatar,
+                      sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.semester,
+                      sp.bio, sp.linkedin_url, sp.github_url
+               FROM users u
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE u.id = ? AND u.role = 'student'""",
+            [student_id]
+        )
+        if not student:
+            return jsonify({"error": "Candidate not found."}), 404
+
+        projects = db.all(
+            """SELECT p.id, p.title, p.description, p.status, p.created_at
+               FROM projects p
+               JOIN project_members pm ON p.id = pm.project_id
+               WHERE pm.student_id = ?
+               ORDER BY p.created_at DESC""",
+            [student_id]
+        )
+
+        return jsonify({
+            "student": student,
+            "projects": projects
+        })
+
+    except Exception as error:
+        print("Get candidate profile error:", error)
+        return jsonify({"error": "Failed to load candidate profile."}), 500
+
+
+# 13. Invite Candidate to Team
+@teams_bp.route("/<int:team_id>/invite", methods=["POST"])
+@authenticate_token
+@require_role("student")
+def invite_to_team(team_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        recipient_id = data.get("studentId") or data.get("recipientId")
+        message = data.get("message")
+
+        if not recipient_id:
+            return jsonify({"error": "Student ID is required."}), 400
+
+        db = get_db()
+        leader_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        if team["leader_id"] != leader_id:
+            return jsonify({"error": "Only the team leader can send invitations."}), 403
+
+        max_members = team.get("max_members") or 4
+        current_count = db.get("SELECT COUNT(*) as count FROM team_members WHERE team_id = ?", [team_id])["count"]
+        if current_count >= max_members:
+            return jsonify({"error": "Team is already at maximum capacity (0 vacancies remaining)."}), 400
+
+        recipient = db.get("SELECT id, name FROM users WHERE id = ? AND role = 'student'", [recipient_id])
+        if not recipient:
+            return jsonify({"error": "Selected student not found or ineligible."}), 404
+
+        already_member = db.get("SELECT team_id FROM team_members WHERE team_id = ? AND student_id = ?", [team_id, recipient_id])
+        if already_member:
+            return jsonify({"error": f"{recipient['name']} is already a confirmed member of this team."}), 400
+
+        existing_inv = db.get(
+            "SELECT id FROM team_invitations WHERE team_id = ? AND recipient_id = ? AND status = 'pending'",
+            [team_id, recipient_id]
+        )
+        if existing_inv:
+            return jsonify({"error": f"A pending invitation has already been sent to {recipient['name']}."}), 400
+
+        io = current_app.extensions.get("socketio")
+        inv_msg = message.strip() if message and message.strip() else f"You have been invited by {g.user['name']} to join the '{team['name']}' capstone project team."
+
+        with db.transaction():
+            res = db.run(
+                """INSERT INTO team_invitations (team_id, sender_id, recipient_id, message, status)
+                   VALUES (?, ?, ?, ?, 'pending')""",
+                [team_id, leader_id, recipient_id, inv_msg]
+            )
+            inv_id = res.lastID
+
+            create_system_notification(
+                db, io,
+                title=f"Team Invitation: {team['name']}",
+                body=f"Team leader {g.user['name']} invited you to join team '{team['name']}' ({team.get('project_title') or 'Capstone'}).",
+                audience="user",
+                posted_by=leader_id,
+                target_user_id=recipient_id
+            )
+
+        return jsonify({
+            "message": f"Invitation successfully sent to {recipient['name']}.",
+            "invitationId": inv_id
+        }), 201
+
+    except Exception as error:
+        print("Invite to team error:", error)
+        return jsonify({"error": "Failed to send team invitation."}), 500
+
+
+# 14. Get Sent and Received Invitations
+@teams_bp.route("/my-invitations", methods=["GET"])
+@authenticate_token
+@require_role("student")
+def get_my_invitations():
+    try:
+        db = get_db()
+        student_id = g.user["id"]
+
+        received = db.all(
+            """SELECT ti.*, t.name as team_name, t.project_title, t.domain, t.max_members,
+                      u.name as sender_name, u.avatar as sender_avatar,
+                      (SELECT COUNT(*) FROM team_members WHERE team_id = ti.team_id) as current_members_count
+               FROM team_invitations ti
+               JOIN teams t ON ti.team_id = t.id
+               JOIN users u ON ti.sender_id = u.id
+               WHERE ti.recipient_id = ?
+               ORDER BY ti.created_at DESC""",
+            [student_id]
+        )
+
+        sent = db.all(
+            """SELECT ti.*, t.name as team_name, t.project_title,
+                      u.name as recipient_name, u.avatar as recipient_avatar,
+                      sp.reg_no as recipient_reg_no, sp.strength as recipient_strength, sp.languages as recipient_languages
+               FROM team_invitations ti
+               JOIN teams t ON ti.team_id = t.id
+               JOIN users u ON ti.recipient_id = u.id
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE ti.sender_id = ? OR t.leader_id = ?
+               ORDER BY ti.created_at DESC""",
+            [student_id, student_id]
+        )
+
+        return jsonify({
+            "received": received,
+            "sent": sent
+        })
+
+    except Exception as error:
+        print("Get invitations error:", error)
+        return jsonify({"error": "Failed to retrieve invitations."}), 500
+
+
+# 15. Decide Team Invitation (Accept / Reject)
+@teams_bp.route("/invitations/<int:invitation_id>/decide", methods=["POST"])
+@authenticate_token
+@require_role("student")
+def decide_team_invitation(invitation_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        action = data.get("action")
+
+        if action not in ("accept", "reject"):
+            return jsonify({"error": "Invalid action. Must be 'accept' or 'reject'."}), 400
+
+        db = get_db()
+        student_id = g.user["id"]
+
+        inv = db.get(
+            """SELECT ti.*, t.name as team_name, t.leader_id, t.max_members,
+                      u.name as recipient_name
+               FROM team_invitations ti
+               JOIN teams t ON ti.team_id = t.id
+               JOIN users u ON ti.recipient_id = u.id
+               WHERE ti.id = ?""",
+            [invitation_id]
+        )
+
+        if not inv:
+            return jsonify({"error": "Invitation not found."}), 404
+
+        if inv["recipient_id"] != student_id:
+            return jsonify({"error": "You are not authorized to respond to this invitation."}), 403
+
+        if inv["status"] != "pending":
+            return jsonify({"error": f"This invitation has already been {inv['status']}."}), 400
+
+        io = current_app.extensions.get("socketio")
+
+        if action == "accept":
+            current_count = db.get("SELECT COUNT(*) as count FROM team_members WHERE team_id = ?", [inv["team_id"]])["count"]
+            max_members = inv.get("max_members") or 4
+            if current_count >= max_members:
+                return jsonify({"error": "This team has already reached its maximum capacity."}), 400
+
+            with db.transaction():
+                db.run(
+                    "UPDATE team_invitations SET status = 'accepted', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [invitation_id]
+                )
+
+                existing_member = db.get(
+                    "SELECT team_id FROM team_members WHERE team_id = ? AND student_id = ?",
+                    [inv["team_id"], student_id]
+                )
+                if not existing_member:
+                    db.run(
+                        "INSERT INTO team_members (team_id, student_id, role) VALUES (?, ?, 'member')",
+                        [inv["team_id"], student_id]
+                    )
+
+                cg = db.get("SELECT id FROM chat_groups WHERE team_id = ?", [inv["team_id"]])
+                if cg:
+                    db.run(
+                        "INSERT OR IGNORE INTO chat_group_members (group_id, user_id) VALUES (?, ?)",
+                        [cg["id"], student_id]
+                    )
+                    db.run(
+                        "INSERT INTO messages (group_id, sender_id, body) VALUES (?, ?, ?)",
+                        [cg["id"], student_id, f"Hello everyone! I have joined the {inv['team_name']} workspace."]
+                    )
+
+                create_system_notification(
+                    db, io,
+                    title="Team Invitation Accepted!",
+                    body=f"{inv['recipient_name']} accepted your invitation to join '{inv['team_name']}'.",
+                    audience="user",
+                    posted_by=student_id,
+                    target_user_id=inv["leader_id"]
+                )
+
+            return jsonify({
+                "message": f"Successfully joined team '{inv['team_name']}'!",
+                "status": "accepted"
+            })
+
+        else:
+            with db.transaction():
+                db.run(
+                    "UPDATE team_invitations SET status = 'rejected', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [invitation_id]
+                )
+                create_system_notification(
+                    db, io,
+                    title="Team Invitation Declined",
+                    body=f"{inv['recipient_name']} declined the invitation to join team '{inv['team_name']}'.",
+                    audience="user",
+                    posted_by=student_id,
+                    target_user_id=inv["leader_id"]
+                )
+
+            return jsonify({
+                "message": f"Declined invitation from '{inv['team_name']}'.",
+                "status": "rejected"
+            })
+
+    except Exception as error:
+        print("Decide invitation error:", error)
+        return jsonify({"error": "Failed to process invitation decision."}), 500
