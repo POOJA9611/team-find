@@ -66,25 +66,52 @@ function renderWorkspace(container) {
   const isConnected = typeof socketManager?.isConnected === 'function' ? socketManager.isConnected() : Boolean(socketManager?.isConnected);
 
   container.innerHTML = `
-    <div
-      class="card"
-      style="padding: 0; height: 75vh; display: grid; grid-template-columns: 300px 1fr 240px; overflow: hidden; border-radius: 20px;"
-    >
+    <style>
+      .chat-workspace-card {
+        padding: 0 !important;
+        height: calc(100vh - 140px) !important;
+        min-height: 480px !important;
+        max-height: calc(100vh - 110px) !important;
+        display: grid !important;
+        grid-template-columns: minmax(220px, 280px) 1fr minmax(180px, 240px) !important;
+        overflow: hidden !important;
+        border-radius: 20px !important;
+        box-shadow: var(--shadow-card) !important;
+      }
+      @media (max-width: 960px) {
+        .chat-workspace-card {
+          grid-template-columns: minmax(200px, 240px) 1fr !important;
+        }
+        .chat-participants-col {
+          display: none !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .chat-workspace-card {
+          grid-template-columns: 1fr !important;
+        }
+        .chat-channels-col {
+          display: none !important;
+        }
+      }
+    </style>
+
+    <div class="card chat-workspace-card">
       <!-- 1. Groups Sidebar -->
-      <div style="border-right: 1px solid var(--border-color); background-color: #FAF5FF; display: flex; flex-direction: column;">
-        <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+      <div class="chat-channels-col" style="border-right: 1px solid var(--border-color); background-color: #FAF5FF; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;">
+        <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
           <div style="font-size: 14px; font-weight: 800; color: var(--text-primary);">
             <i class="fa-solid fa-comments text-indigo mr-2"></i> Chat Channels
           </div>
           <span
             id="chat-live-badge"
-            style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background-color: ${isConnected ? '#DCFCE7' : '#FEE2E2'}; color: ${isConnected ? '#16A34A' : '#DC2626'};"
+            style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background-color: ${isConnected ? '#DCFCE7' : '#FEE2E2'}; color: ${isConnected ? '#16A34A' : '#DC2626'}; transition: all 0.2s;"
           >
             ${isConnected ? 'LIVE' : 'OFFLINE'}
           </span>
         </div>
 
-        <div style="flex: 1; overflow-y: auto;" id="chat-channels-list">
+        <div style="flex: 1 1 0%; min-height: 0; overflow-y: auto;" id="chat-channels-list">
           ${currentGroups.map(g => `
             <div
               class="chat-group-item"
@@ -113,9 +140,9 @@ function renderWorkspace(container) {
       </div>
 
       <!-- 2. Messages Main Thread -->
-      <div style="display: flex; flex-direction: column; background-color: #FFFFFF;">
+      <div class="chat-main-thread" style="display: flex; flex-direction: column; background-color: #FFFFFF; height: 100%; min-height: 0; overflow: hidden;">
         <!-- Header -->
-        <div style="padding: 14px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: #fff;">
+        <div style="padding: 14px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background-color: #fff; flex-shrink: 0;">
           <div>
             <h3 style="font-size: 15px; font-weight: 800; margin: 0; color: var(--text-primary);">
               ${escapeHtml(activeGroup.name)}
@@ -133,27 +160,28 @@ function renderWorkspace(container) {
         </div>
 
         <!-- Chat Error Banner -->
-        <div id="chat-error-banner" style="display: none; padding: 8px 16px; background-color: #FEE2E2; color: #DC2626; font-size: 12px; font-weight: 600;"></div>
+        <div id="chat-error-banner" style="display: none; padding: 8px 16px; background-color: #FEE2E2; color: #DC2626; font-size: 12px; font-weight: 600; flex-shrink: 0;"></div>
 
         <!-- Messages Area -->
-        <div id="messages-container" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <div id="messages-container" style="flex: 1 1 0%; min-height: 0; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
           <div class="text-center text-muted" style="margin: auto;">
             <i class="fa-solid fa-spinner fa-spin text-xl text-indigo"></i>
           </div>
         </div>
 
-        <!-- Input Bar -->
-        <form id="chat-send-form" style="padding: 14px 18px; border-top: 1px solid var(--border-color); background-color: #FAF5FF; display: flex; gap: 10px;">
+        <!-- Input Bar (Composer Stays Fully Visible and Accessible) -->
+        <form id="chat-send-form" style="flex-shrink: 0; padding: 12px 18px; border-top: 1px solid var(--border-color); background-color: #FAF5FF; display: flex; gap: 10px; align-items: center;">
           <input
             id="chat-message-input"
             type="text"
+            autocomplete="off"
             placeholder="Message ${escapeHtml(activeGroup.name)}..."
-            style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 13px; outline: none; background-color: #fff;"
+            style="flex: 1; min-width: 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-color); font-size: 13px; outline: none; background-color: #fff;"
           />
           <button
             id="chat-send-btn"
             type="submit"
-            style="background-color: var(--color-primary); color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;"
+            style="flex-shrink: 0; background-color: var(--color-primary); color: #fff; border: none; border-radius: 10px; padding: 0 20px; height: 38px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity 0.15s;"
           >
             <i class="fa-solid fa-paper-plane"></i> Send
           </button>
@@ -161,12 +189,12 @@ function renderWorkspace(container) {
       </div>
 
       <!-- 3. Participants Panel -->
-      <div style="border-left: 1px solid var(--border-color); background-color: #FAF5FF; padding: 16px; display: flex; flex-direction: column;">
-        <div style="font-size: 13px; font-weight: 800; color: var(--text-primary); margin-bottom: 14px;">
+      <div class="chat-participants-col" style="border-left: 1px solid var(--border-color); background-color: #FAF5FF; padding: 16px; display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;">
+        <div style="font-size: 13px; font-weight: 800; color: var(--text-primary); margin-bottom: 14px; flex-shrink: 0;">
           Participants (<span id="chat-participants-count">${activeGroup.members ? activeGroup.members.length : 0}</span>)
         </div>
 
-        <div id="chat-participants-list" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto;">
+        <div id="chat-participants-list" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1 1 0%; min-height: 0;">
           ${(activeGroup.members || []).map(m => `
             <div
               class="chat-participant-item"
@@ -190,6 +218,29 @@ function renderWorkspace(container) {
       </div>
     </div>
   `;
+
+  // Live badge update helper
+  const updateLiveBadge = () => {
+    const badge = container.querySelector('#chat-live-badge');
+    if (!badge) return;
+    const connected = typeof socketManager?.isConnected === 'function' ? socketManager.isConnected() : Boolean(socketManager?.isConnected);
+    badge.textContent = connected ? 'LIVE' : 'OFFLINE';
+    badge.style.backgroundColor = connected ? '#DCFCE7' : '#FEE2E2';
+    badge.style.color = connected ? '#16A34A' : '#DC2626';
+  };
+
+  const socket = socketManager?.getSocket?.();
+  if (socket) {
+    socket.on('connect', () => {
+      updateLiveBadge();
+      if (activeGroupId) {
+        socket.emit('join_group', { groupId: activeGroupId });
+      }
+    });
+    socket.on('disconnect', () => {
+      updateLiveBadge();
+    });
+  }
 
   // Attach channel click handlers
   container.querySelectorAll('.chat-group-item').forEach(item => {
