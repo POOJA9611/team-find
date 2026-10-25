@@ -970,125 +970,44 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                   </div>
                 </div>
 
-                <!-- Workspace Sub-Navigation Tabs -->
-                <div style="display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--border-light); padding-bottom: 12px; margin-bottom: 22px; flex-wrap: wrap;">
-                  <button id="ws-tab-overview" class="btn btn-sm ${workspaceSection === 'overview' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'overview' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
-                    <i class="fa-solid fa-gauge mr-1"></i> Overview & Progress
-                  </button>
-                  <button id="ws-tab-tasks" class="btn btn-sm ${workspaceSection === 'tasks' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'tasks' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
-                    <i class="fa-solid fa-list-check mr-1"></i> Tasks & Work
-                    <span class="badge ${workspaceSection === 'tasks' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 6px; font-size: 10px;">${(myTeamData?.tasks || []).length}</span>
-                  </button>
-                  <button id="ws-tab-members" class="btn btn-sm ${workspaceSection === 'members' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'members' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
-                    <i class="fa-solid fa-users-gear mr-1"></i> Members & Roles
-                    <span class="badge ${workspaceSection === 'members' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 6px; font-size: 10px;">${confirmedCount}</span>
-                  </button>
-                  <button id="ws-tab-files" class="btn btn-sm ${workspaceSection === 'files' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'files' ? 'font-weight: 700; box-shadow: var(--shadow-sm);' : ''}">
-                    <i class="fa-solid fa-folder-open mr-1"></i> Chat & Files
-                  </button>
-                </div>
-
-                <!-- SECTION 1: OVERVIEW & PROGRESS -->
-                ${workspaceSection === 'overview' ? `
-                  <!-- Metrics & Recruiting Row (Matches Mockup) -->
-                  <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-radius: 14px; padding: 18px 24px; margin-bottom: 22px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px;">
-                      <div>
-                        <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
-                          ${confirmedCount} / ${maxMembers}
-                        </div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
-                          team members
-                        </div>
+                <!-- Metrics & Recruiting Row (Matches Mockup 1:1) -->
+                <div style="background-color: #F8FAFC; border: 1px solid var(--border-light); border-radius: 14px; padding: 18px 24px; margin-bottom: 22px;">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px;">
+                    <div>
+                      <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
+                        ${confirmedCount} / ${maxMembers}
                       </div>
-                      <div>
-                        <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
-                          ${vacancies}
-                        </div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
-                          vacancies
-                        </div>
+                      <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
+                        team members
                       </div>
                     </div>
+                    <div>
+                      <div style="font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1;">
+                        ${vacancies}
+                      </div>
+                      <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">
+                        vacancies
+                      </div>
+                    </div>
+                  </div>
 
-                    <!-- Recruiting Status Line -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 14px; flex-wrap: wrap; gap: 10px;">
-                      <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
-                        Recruiting status
+                  <!-- Recruiting Status Line -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 14px; flex-wrap: wrap; gap: 10px;">
+                    <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
+                      Recruiting status
+                    </span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span class="badge ${team.is_accepting_members ? 'badge-emerald' : 'badge-danger'}" style="padding: 4px 10px; font-weight: 700;">
+                        ${team.is_accepting_members ? 'Open' : 'Closed'}
                       </span>
-                      <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="badge ${team.is_accepting_members ? 'badge-emerald' : 'badge-danger'}" style="padding: 4px 10px; font-weight: 700;">
-                          ${team.is_accepting_members ? 'Open' : 'Closed'}
-                        </span>
-                        ${isLeader ? `
-                          <button id="btn-toggle-recruiting" class="btn btn-xs ${team.is_accepting_members ? 'btn-subtle' : 'btn-primary'}" style="font-size: 11px;">
-                            ${team.is_accepting_members ? 'Close Recruiting' : 'Open Recruiting'}
-                          </button>
-                        ` : ''}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Accurate Progress & My Role Cards -->
-                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 22px;">
-                    <!-- Overall Team Progress -->
-                    <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                          <i class="fa-solid fa-chart-line text-indigo"></i>
-                          <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0;">Overall Team Progress</h4>
-                        </div>
-                        <span style="font-size: 18px; font-weight: 800; color: #4338CA;">
-                          ${(myTeamData?.teamProgress?.total || 0) > 0 ? `${myTeamData.teamProgress.percentage}%` : '0%'}
-                        </span>
-                      </div>
-
-                      <div style="width: 100%; height: 8px; background-color: #EEF2FF; border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
-                        <div style="width: ${myTeamData?.teamProgress?.percentage || 0}%; height: 100%; background: linear-gradient(90deg, #4338CA, #10B981); border-radius: 4px; transition: width 0.3s ease;"></div>
-                      </div>
-
-                      ${(myTeamData?.teamProgress?.total || 0) === 0 ? `
-                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">
-                          No tasks created yet for this project team.
-                        </div>
-                      ` : `
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px;">
-                          <span class="badge badge-emerald"><i class="fa-solid fa-check mr-1"></i>${myTeamData?.teamProgress?.completed || 0} Completed</span>
-                          <span class="badge badge-amber"><i class="fa-solid fa-clock mr-1"></i>${myTeamData?.teamProgress?.in_progress || 0} In Progress</span>
-                          <span class="badge badge-subtle">${myTeamData?.teamProgress?.not_started || 0} Not Started</span>
-                          ${(myTeamData?.teamProgress?.overdue || 0) > 0 ? `<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${myTeamData.teamProgress.overdue} Overdue</span>` : ''}
-                        </div>
-                      `}
-                    </div>
-
-                    <!-- My Role & Work Completion -->
-                    <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
-                      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                        <div>
-                          <div style="font-size: 11px; font-weight: 700; color: var(--color-primary); text-transform: uppercase;">My Project Role</div>
-                          <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 2px 0 0 0;">
-                            ${escapeHtml(myTeamData?.myRole?.role_title || (team.my_role === 'leader' ? 'Project Leader' : 'Team Member'))}
-                          </h4>
-                        </div>
-                        <span class="badge ${team.my_role === 'leader' ? 'badge-amber' : 'badge-indigo'}">
-                          ${team.my_role === 'leader' ? 'Team Leader' : 'Team Member'}
-                        </span>
-                      </div>
-
-                      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin: 0 0 10px 0;">
-                        ${escapeHtml(myTeamData?.myRole?.responsibilities || (team.my_role === 'leader' ? 'Lead architecture, assign team tasks, and coordinate with mentor.' : 'Complete assigned deliverables and contribute to milestones.'))}
-                      </p>
-
-                      <div style="border-top: 1px solid var(--border-light); padding-top: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
-                        <span style="color: var(--text-muted);">
-                          My Work: <strong>${myTeamData?.individualProgress?.completed || 0}/${myTeamData?.individualProgress?.total || 0}</strong> tasks (${myTeamData?.individualProgress?.percentage || 0}%)
-                        </span>
-                        <button id="btn-goto-my-tasks" class="btn btn-xs btn-subtle" style="font-size: 11px;">
-                          View My Tasks <i class="fa-solid fa-arrow-right ml-1"></i>
+                      ${isLeader ? `
+                        <button id="btn-toggle-recruiting" class="btn btn-xs ${team.is_accepting_members ? 'btn-subtle' : 'btn-primary'}" style="font-size: 11px;">
+                          ${team.is_accepting_members ? 'Close Recruiting' : 'Open Recruiting'}
                         </button>
-                      </div>
+                      ` : ''}
                     </div>
                   </div>
+                </div>
 
                   <!-- Two Action Cards (Applications & Smart Match) Side-by-Side (Matches Mockup) -->
                   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -1244,7 +1163,100 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                       </table>
                     </div>
                   </div>
-                ` : workspaceSection === 'tasks' ? `
+
+                  <!-- Project Workspace & Milestone Tracking -->
+                  <div style="border-top: 2px solid var(--border-light); padding-top: 24px; margin-top: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                      <div>
+                        <h4 style="font-size: 16px; font-weight: 800; color: var(--text-primary); margin: 0 0 2px 0;">
+                          <i class="fa-solid fa-laptop-code text-indigo mr-2"></i> Project Workspace & Milestones
+                        </h4>
+                        <span style="font-size: 12px; color: var(--text-secondary);">
+                          Assign member roles, track tasks and deadlines, and collaborate on deliverables.
+                        </span>
+                      </div>
+
+                      <!-- Workspace Sub-Navigation Tabs -->
+                      <div style="display: flex; gap: 6px; flex-wrap: wrap; background-color: var(--bg-subtle); padding: 4px; border-radius: 10px;">
+                        <button id="ws-tab-overview" class="btn btn-xs ${workspaceSection === 'overview' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'overview' ? 'font-weight: 700;' : ''}">
+                          <i class="fa-solid fa-chart-line mr-1"></i> Overview & Progress
+                        </button>
+                        <button id="ws-tab-tasks" class="btn btn-xs ${workspaceSection === 'tasks' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'tasks' ? 'font-weight: 700;' : ''}">
+                          <i class="fa-solid fa-list-check mr-1"></i> Tasks & Work
+                          <span class="badge ${workspaceSection === 'tasks' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 4px; font-size: 9px;">${(myTeamData?.tasks || []).length}</span>
+                        </button>
+                        <button id="ws-tab-members" class="btn btn-xs ${workspaceSection === 'members' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'members' ? 'font-weight: 700;' : ''}">
+                          <i class="fa-solid fa-users-gear mr-1"></i> Members & Roles
+                          <span class="badge ${workspaceSection === 'members' ? 'badge-subtle' : 'badge-indigo'}" style="margin-left: 4px; font-size: 9px;">${confirmedCount}</span>
+                        </button>
+                        <button id="ws-tab-files" class="btn btn-xs ${workspaceSection === 'files' ? 'btn-primary' : 'btn-subtle'}" style="${workspaceSection === 'files' ? 'font-weight: 700;' : ''}">
+                          <i class="fa-solid fa-folder-open mr-1"></i> Chat & Files
+                        </button>
+                      </div>
+                    </div>
+
+                    ${workspaceSection === 'overview' ? `
+                      <!-- WORKSPACE SECTION 1: OVERVIEW & PROGRESS CARDS -->
+                      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                        <!-- Overall Team Progress -->
+                        <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
+                          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <i class="fa-solid fa-chart-line text-indigo"></i>
+                              <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0;">Overall Team Progress</h4>
+                            </div>
+                            <span style="font-size: 18px; font-weight: 800; color: #4338CA;">
+                              ${(myTeamData?.teamProgress?.total || 0) > 0 ? `${myTeamData.teamProgress.percentage}%` : '0%'}
+                            </span>
+                          </div>
+
+                          <div style="width: 100%; height: 8px; background-color: #EEF2FF; border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                            <div style="width: ${myTeamData?.teamProgress?.percentage || 0}%; height: 100%; background: linear-gradient(90deg, #4338CA, #10B981); border-radius: 4px; transition: width 0.3s ease;"></div>
+                          </div>
+
+                          ${(myTeamData?.teamProgress?.total || 0) === 0 ? `
+                            <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">
+                              No tasks created yet for this project team.
+                            </div>
+                          ` : `
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px;">
+                              <span class="badge badge-emerald"><i class="fa-solid fa-check mr-1"></i>${myTeamData?.teamProgress?.completed || 0} Completed</span>
+                              <span class="badge badge-amber"><i class="fa-solid fa-clock mr-1"></i>${myTeamData?.teamProgress?.in_progress || 0} In Progress</span>
+                              <span class="badge badge-subtle">${myTeamData?.teamProgress?.not_started || 0} Not Started</span>
+                              ${(myTeamData?.teamProgress?.overdue || 0) > 0 ? `<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${myTeamData.teamProgress.overdue} Overdue</span>` : ''}
+                            </div>
+                          `}
+                        </div>
+
+                        <!-- My Role & Work Completion -->
+                        <div style="background-color: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px 20px;">
+                          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                            <div>
+                              <div style="font-size: 11px; font-weight: 700; color: var(--color-primary); text-transform: uppercase;">My Project Role</div>
+                              <h4 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 2px 0 0 0;">
+                                ${escapeHtml(myTeamData?.myRole?.role_title || (team.my_role === 'leader' ? 'Project Leader' : 'Team Member'))}
+                              </h4>
+                            </div>
+                            <span class="badge ${team.my_role === 'leader' ? 'badge-amber' : 'badge-indigo'}">
+                              ${team.my_role === 'leader' ? 'Team Leader' : 'Team Member'}
+                            </span>
+                          </div>
+
+                          <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin: 0 0 10px 0;">
+                            ${escapeHtml(myTeamData?.myRole?.responsibilities || (team.my_role === 'leader' ? 'Lead architecture, assign team tasks, and coordinate with mentor.' : 'Complete assigned deliverables and contribute to milestones.'))}
+                          </p>
+
+                          <div style="border-top: 1px solid var(--border-light); padding-top: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+                            <span style="color: var(--text-muted);">
+                              My Work: <strong>${myTeamData?.individualProgress?.completed || 0}/${myTeamData?.individualProgress?.total || 0}</strong> tasks (${myTeamData?.individualProgress?.percentage || 0}%)
+                            </span>
+                            <button id="btn-goto-my-tasks" class="btn btn-xs btn-subtle" style="font-size: 11px;">
+                              View My Tasks <i class="fa-solid fa-arrow-right ml-1"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ` : workspaceSection === 'tasks' ? `
                   <!-- SECTION 2: TASKS & WORK COMPLETION -->
                   <div>
                     <!-- Tasks Header -->
@@ -1513,6 +1525,7 @@ export async function renderStudentTeams(container, { navigate, onOpenFacultyMod
                     </div>
                   </div>
                 `}
+                </div>
               </div>
             ` : myTeamSubView === 'applications' ? `
               <!-- Sub-View: Applications -->
