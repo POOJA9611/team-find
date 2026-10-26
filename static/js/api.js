@@ -185,6 +185,7 @@ export const api = {
       body: JSON.stringify(proposalData)
     }),
   getAvailableTeamsToJoin: () => request('/teams/available-to-join'),
+  getTeamApplications: (teamId) => request(`/teams/${teamId}/applications`),
   requestToJoinTeam: (teamId, message) =>
     request(`/teams/${teamId}/join-request`, {
       method: 'POST',

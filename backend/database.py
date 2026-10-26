@@ -305,6 +305,7 @@ def ensure_workspace_schema(db):
                 title TEXT NOT NULL,
                 description TEXT,
                 assigned_to INTEGER NULLABLE,
+                priority TEXT NOT NULL DEFAULT 'medium',
                 deadline DATE NULLABLE,
                 status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started', 'in_progress', 'completed')),
                 created_by INTEGER NOT NULL,
@@ -315,6 +316,9 @@ def ensure_workspace_schema(db):
                 FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
             )
             """)
+            task_cols = [r[1] for r in conn.execute("PRAGMA table_info(team_tasks)").fetchall()]
+            if "priority" not in task_cols:
+                conn.execute("ALTER TABLE team_tasks ADD COLUMN priority TEXT DEFAULT 'medium'")
             conn.commit()
         else:
             with conn.cursor() as cur:
@@ -325,6 +329,7 @@ def ensure_workspace_schema(db):
                     title VARCHAR(255) NOT NULL,
                     description TEXT DEFAULT NULL,
                     assigned_to INT NULL DEFAULT NULL,
+                    priority VARCHAR(50) NOT NULL DEFAULT 'medium',
                     deadline DATE NULL DEFAULT NULL,
                     status ENUM('not_started', 'in_progress', 'completed') NOT NULL DEFAULT 'not_started',
                     created_by INT NOT NULL,
@@ -343,6 +348,10 @@ def ensure_workspace_schema(db):
                     pass
                 try:
                     cur.execute("ALTER TABLE team_members ADD COLUMN responsibilities TEXT DEFAULT NULL")
+                except Exception:
+                    pass
+                try:
+                    cur.execute("ALTER TABLE team_tasks ADD COLUMN priority VARCHAR(50) DEFAULT 'medium'")
                 except Exception:
                     pass
     except Exception as err:

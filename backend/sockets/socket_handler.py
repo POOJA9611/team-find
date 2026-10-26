@@ -3,8 +3,18 @@ from flask_socketio import emit, join_room, leave_room, disconnect
 from backend.database import get_db
 from backend.middleware.auth import decode_token
 
+_connected_users = {}
+
 
 def setup_socket_events(socketio):
+    def get_socket_user():
+        if hasattr(request, "sid_user") and request.sid_user:
+            return request.sid_user
+        sid = getattr(request, "sid", None)
+        if sid and sid in _connected_users:
+            return _connected_users[sid]
+        return None
+
     @socketio.on("connect")
     def on_connect(auth):
         token = None
@@ -30,19 +40,70 @@ def setup_socket_events(socketio):
             print(f"⛔ Socket connect rejected: User {user_id} not found.")
             return False
 
-        # Store user on request session
+        # Store user on session & map
         request.sid_user = user
+        if hasattr(request, "sid") and request.sid:
+            _connected_users[request.sid] = user
+
         user_room = f"user_{user['id']}"
         role_room = f"role_{user['role']}"
 
         join_room(user_room)
         join_room(role_room)
+
+        # Auto-join all project teams the user is a confirmed member or leader of
+        try:
+            if user["role"] == "student":
+                user_teams = db.all("SELECT team_id FROM team_members WHERE student_id = ?", [user["id"]])
+                for ut in user_teams:
+                    t_room = f"team_{ut['team_id']}"
+                    join_room(t_room)
+        except Exception as t_err:
+            print(f"Team room join note: {t_err}")
+
         print(f"⚡ Socket connected: User {user['name']} ({user['role']}, ID: {user['id']})")
         return True
 
+    @socketio.on("join_team")
+    def on_join_team(data):
+        user = get_socket_user()
+        if not user:
+            return {"error": "Authentication required."}
+
+        team_id = data.get("teamId") or data.get("team_id") if isinstance(data, dict) else None
+        if not team_id:
+            return {"error": "Team ID is required."}
+
+        db = get_db()
+        membership = db.get(
+            "SELECT * FROM team_members WHERE team_id = ? AND student_id = ?",
+            [team_id, user["id"]]
+        )
+
+        if not membership and user.get("role") != "hod":
+            print(f"⛔ Unauthorized team join attempt: User {user['id']} tried to join team {team_id}")
+            emit("error_message", {"error": "Access denied: You are not a member of this project team."})
+            return {"error": "Access denied: Not a member."}
+
+        room_name = f"team_{team_id}"
+        join_room(room_name)
+        print(f"👥 User {user['name']} joined team room {room_name}")
+        return {"success": True, "room": room_name}
+
+    @socketio.on("leave_team")
+    def on_leave_team(data):
+        team_id = data.get("teamId") or data.get("team_id") if isinstance(data, dict) else None
+        if team_id:
+            room_name = f"team_{team_id}"
+            leave_room(room_name)
+            user = get_socket_user()
+            user_name = user["name"] if user else "Unknown"
+            print(f"👋 User {user_name} left team room {room_name}")
+            return {"success": True}
+
     @socketio.on("join_group")
     def on_join_group(data):
-        user = getattr(request, "sid_user", None)
+        user = get_socket_user()
         if not user:
             return {"error": "Authentication required."}
 
@@ -72,13 +133,13 @@ def setup_socket_events(socketio):
         if group_id:
             room_name = f"group_{group_id}"
             leave_room(room_name)
-            user = getattr(request, "sid_user", None)
+            user = get_socket_user()
             user_name = user["name"] if user else "Unknown"
             print(f"👋 User {user_name} left room {room_name}")
 
     @socketio.on("chat_message")
     def on_chat_message(data):
-        user = getattr(request, "sid_user", None)
+        user = get_socket_user()
         if not user:
             return {"error": "Authentication required."}
 
@@ -121,7 +182,10 @@ def setup_socket_events(socketio):
 
     @socketio.on("disconnect")
     def on_disconnect():
-        user = getattr(request, "sid_user", None)
+        user = get_socket_user()
+        sid = getattr(request, "sid", None)
+        if sid:
+            _connected_users.pop(sid, None)
         user_name = user["name"] if user else "Unknown"
         user_id = user["id"] if user else "?"
         print(f"🔌 Socket disconnected: User {user_name} (ID: {user_id})")

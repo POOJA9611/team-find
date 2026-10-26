@@ -39,6 +39,7 @@ class SocketManager {
     this.socket.on('connect', () => {
       console.log('⚡ Socket connected to server');
       this._isConnected = true;
+      window.dispatchEvent(new CustomEvent('portal:socket-reconnected'));
     });
 
     this.socket.on('disconnect', () => {
@@ -75,6 +76,35 @@ class SocketManager {
 
     this.socket.on('team_created', () => {
       window.dispatchEvent(new CustomEvent('portal:refresh-view'));
+    });
+
+    // Student -> Project Teams Real-Time Events
+    this.socket.on('team_tasks_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-tasks-updated', { detail: data }));
+    });
+
+    this.socket.on('team_roles_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-roles-updated', { detail: data }));
+    });
+
+    this.socket.on('team_membership_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-membership-updated', { detail: data }));
+    });
+
+    this.socket.on('team_applications_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-applications-updated', { detail: data }));
+    });
+
+    this.socket.on('team_invitations_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-invitations-updated', { detail: data }));
+    });
+
+    this.socket.on('team_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:team-updated', { detail: data }));
+    });
+
+    this.socket.on('available_teams_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('portal:available-teams-updated', { detail: data }));
     });
   }
 
@@ -120,6 +150,18 @@ class SocketManager {
   leaveGroup(groupId) {
     if (this.socket && this.isConnected()) {
       this.socket.emit('leave_group', { groupId: Number(groupId) });
+    }
+  }
+
+  joinTeam(teamId, callback) {
+    if (this.socket && this.isConnected()) {
+      this.socket.emit('join_team', { teamId: Number(teamId) }, callback);
+    }
+  }
+
+  leaveTeam(teamId) {
+    if (this.socket && this.isConnected()) {
+      this.socket.emit('leave_team', { teamId: Number(teamId) });
     }
   }
 

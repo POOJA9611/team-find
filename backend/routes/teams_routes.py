@@ -144,16 +144,30 @@ def get_my_team():
 
         # 1. Retrieve all teams this student belongs to
         all_my_teams = db.all(
-            """SELECT t.id, t.name, t.project_title, tm.role as my_role
+            """SELECT t.*, tm.role as my_role, tm.role_title as my_role_title, tm.responsibilities as my_responsibilities,
+                      lead.name as leader_name, lead.email as leader_email, lead.avatar as leader_avatar,
+                      u.name as faculty_name, u.avatar as faculty_avatar,
+                      (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count,
+                      (SELECT COUNT(*) FROM team_tasks WHERE team_id = t.id) as total_tasks,
+                      (SELECT COUNT(*) FROM team_tasks WHERE team_id = t.id AND status = 'completed') as completed_tasks
                FROM teams t
                JOIN team_members tm ON t.id = tm.team_id
+               LEFT JOIN users lead ON t.leader_id = lead.id
+               LEFT JOIN users u ON t.faculty_id = u.id
                WHERE tm.student_id = ?
                ORDER BY t.created_at DESC""",
             [student_id]
         )
+        for t in all_my_teams:
+            tot = t.get("total_tasks") or 0
+            comp = t.get("completed_tasks") or 0
+            t["progress_percentage"] = round((comp / tot) * 100) if tot > 0 else 0
+            max_m = t.get("max_members") or 4
+            t["max_members"] = max_m
+            t["vacancies"] = max(0, max_m - (t.get("member_count") or 0))
 
         team = None
-        if requested_team_id:
+        if requested_team_id and requested_team_id not in ("none", "list", "0"):
             try:
                 t_id = int(requested_team_id)
                 team = db.get(
@@ -176,8 +190,7 @@ def get_my_team():
                     return jsonify({"error": "You are not an authorized member of this project team."}), 403
             except ValueError:
                 pass
-
-        if not team:
+        elif not requested_team_id:
             team = db.get(
                 """SELECT t.*, tm.role as my_role, tm.role_title, tm.responsibilities,
                           u.name as faculty_name, u.email as faculty_email,
@@ -587,6 +600,15 @@ def request_to_join_team(team_id):
                 posted_by=student_id,
                 target_user_id=team["leader_id"]
             )
+            if io:
+                try:
+                    io.emit("team_applications_updated", {
+                        "team_id": team_id,
+                        "action": "new_application",
+                        "requestId": res.lastID
+                    }, to=f"user_{team['leader_id']}")
+                except Exception as emit_err:
+                    print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": "Join request successfully submitted to team leader.",
@@ -638,6 +660,10 @@ def decide_join_request(request_id):
             if current_count >= req_row["max_members"]:
                 return jsonify({"error": "Team is already at maximum capacity."}), 400
 
+            already_member = db.get("SELECT 1 FROM team_members WHERE team_id = ? AND student_id = ?", [req_row["team_id"], req_row["student_id"]])
+            if already_member:
+                return jsonify({"error": "This student is already a member of the team."}), 400
+
             with db.transaction():
                 db.run(
                     "UPDATE team_join_requests SET status = 'accepted', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -647,6 +673,9 @@ def decide_join_request(request_id):
                     "INSERT INTO team_members (team_id, student_id, role) VALUES (?, ?, 'member')",
                     [req_row["team_id"], req_row["student_id"]]
                 )
+
+                if current_count + 1 >= req_row["max_members"]:
+                    db.run("UPDATE teams SET is_accepting_members = 0 WHERE id = ?", [req_row["team_id"]])
 
                 cg = db.get("SELECT id FROM chat_groups WHERE team_id = ?", [req_row["team_id"]])
                 if cg:
@@ -668,6 +697,27 @@ def decide_join_request(request_id):
                     target_user_id=req_row["student_id"]
                 )
 
+            if io:
+                try:
+                    io.emit("team_membership_updated", {
+                        "team_id": req_row["team_id"],
+                        "student_id": req_row["student_id"],
+                        "action": "joined"
+                    }, to=f"team_{req_row['team_id']}")
+                    io.emit("team_membership_updated", {
+                        "team_id": req_row["team_id"],
+                        "student_id": req_row["student_id"],
+                        "action": "joined"
+                    }, to=f"user_{req_row['student_id']}")
+                    io.emit("team_applications_updated", {
+                        "team_id": req_row["team_id"],
+                        "request_id": request_id,
+                        "status": "accepted"
+                    }, to=f"user_{req_row['leader_id']}")
+                    io.emit("available_teams_updated", {})
+                except Exception as emit_err:
+                    print("Socket emit error:", emit_err)
+
             return jsonify({
                 "message": f"Accepted {req_row['applicant_name']} into team '{req_row['team_name']}'.",
                 "status": "accepted"
@@ -688,6 +738,21 @@ def decide_join_request(request_id):
                     target_user_id=req_row["student_id"]
                 )
 
+            if io:
+                try:
+                    io.emit("team_applications_updated", {
+                        "team_id": req_row["team_id"],
+                        "request_id": request_id,
+                        "status": "rejected"
+                    }, to=f"user_{req_row['leader_id']}")
+                    io.emit("team_applications_updated", {
+                        "team_id": req_row["team_id"],
+                        "request_id": request_id,
+                        "status": "rejected"
+                    }, to=f"user_{req_row['student_id']}")
+                except Exception as emit_err:
+                    print("Socket emit error:", emit_err)
+
             return jsonify({
                 "message": f"Declined join request from {req_row['applicant_name']}.",
                 "status": "rejected"
@@ -696,6 +761,84 @@ def decide_join_request(request_id):
     except Exception as error:
         print("Decide join request error:", error)
         return jsonify({"error": "Failed to process join request decision."}), 500
+
+
+# 6b. Get Team Applications (Dedicated Page for Leader)
+@teams_bp.route("/<int:team_id>/applications", methods=["GET"])
+@authenticate_token
+@require_role("student")
+def get_team_applications(team_id):
+    try:
+        db = get_db()
+        student_id = g.user["id"]
+
+        team = db.get("SELECT * FROM teams WHERE id = ?", [team_id])
+        if not team:
+            return jsonify({"error": "Team not found."}), 404
+
+        is_leader = team["leader_id"] == student_id or db.get(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND student_id = ? AND role = 'leader'",
+            [team_id, student_id]
+        )
+        if not is_leader:
+            return jsonify({"error": "Only the authorized project leader can view and manage applications."}), 403
+
+        members = db.all(
+            """SELECT u.id, u.name, tm.role, sp.strength, sp.languages
+               FROM team_members tm
+               JOIN users u ON tm.student_id = u.id
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE tm.team_id = ?""",
+            [team_id]
+        )
+
+        incoming_requests = db.all(
+            """SELECT jr.*, u.name as student_name, u.email as student_email, u.avatar as student_avatar,
+                      sp.reg_no, sp.strength, sp.languages, sp.cgpa, sp.department, sp.bio
+               FROM team_join_requests jr
+               JOIN users u ON jr.student_id = u.id
+               LEFT JOIN student_profiles sp ON u.id = sp.user_id
+               WHERE jr.team_id = ?
+               ORDER BY (CASE jr.status WHEN 'pending' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END), jr.created_at DESC""",
+            [team_id]
+        )
+
+        for req in incoming_requests:
+            req_student = {
+                "id": req["student_id"],
+                "name": req["student_name"],
+                "languages": req.get("languages") or "",
+                "strength": req.get("strength") or "fullstack",
+                "bio": req.get("bio") or "",
+                "department": req.get("department") or ""
+            }
+            match_res = calculate_student_team_match(req_student, team, members)
+            req["compatibility_score"] = match_res["score"]
+            req["match_explanation"] = match_res["explanation"]
+            req["matched_skills"] = match_res.get("matchedTech", [])
+
+        confirmed_count = len(members)
+        max_members = team.get("max_members") or 4
+        vacancies = max(0, max_members - confirmed_count)
+
+        return jsonify({
+            "applications": incoming_requests,
+            "team": {
+                "id": team["id"],
+                "name": team["name"],
+                "project_title": team.get("project_title"),
+                "status": team.get("status"),
+                "is_accepting_members": team.get("is_accepting_members"),
+                "max_members": max_members,
+                "confirmed_members": confirmed_count,
+                "vacancies": vacancies,
+                "is_full": confirmed_count >= max_members
+            }
+        })
+
+    except Exception as error:
+        print("Get team applications error:", error)
+        return jsonify({"error": "Failed to retrieve project applications."}), 500
 
 
 # 7. Toggle Recruiting
@@ -716,6 +859,14 @@ def toggle_recruiting(team_id):
 
         new_status = 0 if team.get("is_accepting_members") else 1
         db.run("UPDATE teams SET is_accepting_members = ? WHERE id = ?", [new_status, team_id])
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_updated", {"team_id": team_id, "is_accepting_members": new_status}, to=f"team_{team_id}")
+                io.emit("available_teams_updated", {})
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": f"Team recruiting is now {'open' if new_status else 'closed'}.",
@@ -1157,6 +1308,17 @@ def invite_to_team(team_id):
                 target_user_id=recipient_id
             )
 
+        if io:
+            try:
+                io.emit("team_invitations_updated", {
+                    "team_id": team_id,
+                    "recipient_id": recipient_id,
+                    "invitation_id": inv_id,
+                    "action": "new_invitation"
+                }, to=f"user_{recipient_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
+
         return jsonify({
             "message": f"Invitation successfully sent to {recipient['name']}.",
             "invitationId": inv_id,
@@ -1277,6 +1439,10 @@ def decide_team_invitation(invitation_id):
                         [inv["team_id"], student_id]
                     )
 
+                # Auto-close recruiting if maximum capacity reached
+                if current_count + 1 >= max_members:
+                    db.run("UPDATE teams SET is_accepting_members = 0 WHERE id = ?", [inv["team_id"]])
+
                 cg = db.get("SELECT id FROM chat_groups WHERE team_id = ?", [inv["team_id"]])
                 if cg:
                     db.run(
@@ -1297,6 +1463,27 @@ def decide_team_invitation(invitation_id):
                     target_user_id=inv["leader_id"]
                 )
 
+            if io:
+                try:
+                    io.emit("team_membership_updated", {
+                        "team_id": inv["team_id"],
+                        "student_id": student_id,
+                        "action": "member_joined"
+                    }, to=f"team_{inv['team_id']}")
+                    io.emit("team_membership_updated", {
+                        "team_id": inv["team_id"],
+                        "student_id": student_id,
+                        "action": "member_joined"
+                    }, to=f"user_{student_id}")
+                    io.emit("team_invitations_updated", {
+                        "team_id": inv["team_id"],
+                        "invitation_id": invitation_id,
+                        "status": "accepted"
+                    }, to=f"user_{inv['leader_id']}")
+                    io.emit("available_teams_updated", {})
+                except Exception as emit_err:
+                    print("Socket emit error:", emit_err)
+
             return jsonify({
                 "message": f"Successfully joined team '{inv['team_name']}'!",
                 "status": "accepted"
@@ -1316,6 +1503,21 @@ def decide_team_invitation(invitation_id):
                     posted_by=student_id,
                     target_user_id=inv["leader_id"]
                 )
+
+            if io:
+                try:
+                    io.emit("team_invitations_updated", {
+                        "team_id": inv["team_id"],
+                        "invitation_id": invitation_id,
+                        "status": "rejected"
+                    }, to=f"user_{inv['leader_id']}")
+                    io.emit("team_invitations_updated", {
+                        "team_id": inv["team_id"],
+                        "invitation_id": invitation_id,
+                        "status": "rejected"
+                    }, to=f"user_{student_id}")
+                except Exception as emit_err:
+                    print("Socket emit error:", emit_err)
 
             return jsonify({
                 "message": f"Declined invitation from '{inv['team_name']}'.",
@@ -1359,6 +1561,18 @@ def update_member_role(team_id, target_student_id):
             "UPDATE team_members SET role_title = ?, responsibilities = ? WHERE team_id = ? AND student_id = ?",
             [role_title, responsibilities if responsibilities else None, team_id, target_student_id]
         )
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_roles_updated", {
+                    "team_id": team_id,
+                    "student_id": target_student_id,
+                    "role_title": role_title,
+                    "responsibilities": responsibilities or None
+                }, to=f"team_{team_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": "Member role and responsibilities updated successfully.",
@@ -1407,6 +1621,9 @@ def create_team_task(team_id):
         title = (data.get("title") or "").strip()
         description = (data.get("description") or "").strip()
         assigned_to = data.get("assigned_to") or data.get("assignedTo")
+        priority = (data.get("priority") or "medium").strip().lower()
+        if priority not in ("low", "medium", "high", "urgent"):
+            priority = "medium"
         deadline = (data.get("deadline") or "").strip() or None
 
         if not title:
@@ -1424,9 +1641,9 @@ def create_team_task(team_id):
             assigned_to = None
 
         res = db.run(
-            """INSERT INTO team_tasks (team_id, title, description, assigned_to, deadline, status, created_by)
-               VALUES (?, ?, ?, ?, ?, 'not_started', ?)""",
-            [team_id, title, description or None, assigned_to, deadline, current_student_id]
+            """INSERT INTO team_tasks (team_id, title, description, assigned_to, priority, deadline, status, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, 'not_started', ?)""",
+            [team_id, title, description or None, assigned_to, priority, deadline, current_student_id]
         )
         task_id = res.lastID
 
@@ -1437,6 +1654,17 @@ def create_team_task(team_id):
                WHERE tt.id = ?""",
             [task_id]
         )
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_tasks_updated", {
+                    "team_id": team_id,
+                    "action": "created",
+                    "task": task
+                }, to=f"team_{team_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": "Task created successfully.",
@@ -1473,6 +1701,9 @@ def update_team_task(team_id, task_id):
         title = (data.get("title") or "").strip()
         description = (data.get("description") or "").strip()
         assigned_to = data.get("assigned_to") or data.get("assignedTo")
+        priority = (data.get("priority") or task.get("priority") or "medium").strip().lower()
+        if priority not in ("low", "medium", "high", "urgent"):
+            priority = "medium"
         deadline = (data.get("deadline") or "").strip() or None
 
         if not title:
@@ -1491,9 +1722,9 @@ def update_team_task(team_id, task_id):
 
         db.run(
             """UPDATE team_tasks 
-               SET title = ?, description = ?, assigned_to = ?, deadline = ?, updated_at = CURRENT_TIMESTAMP
+               SET title = ?, description = ?, assigned_to = ?, priority = ?, deadline = ?, updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
-            [title, description or None, assigned_to, deadline, task_id]
+            [title, description or None, assigned_to, priority, deadline, task_id]
         )
 
         updated_task = db.get(
@@ -1503,6 +1734,17 @@ def update_team_task(team_id, task_id):
                WHERE tt.id = ?""",
             [task_id]
         )
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_tasks_updated", {
+                    "team_id": team_id,
+                    "action": "updated",
+                    "task": updated_task
+                }, to=f"team_{team_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": "Task updated successfully.",
@@ -1536,6 +1778,18 @@ def delete_team_task(team_id, task_id):
             return jsonify({"error": "Task not found."}), 404
 
         db.run("DELETE FROM team_tasks WHERE id = ?", [task_id])
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_tasks_updated", {
+                    "team_id": team_id,
+                    "action": "deleted",
+                    "taskId": task_id
+                }, to=f"team_{team_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
+
         return jsonify({"message": "Task deleted successfully."})
 
     except Exception as error:
@@ -1588,6 +1842,17 @@ def update_task_status(team_id, task_id):
                WHERE tt.id = ?""",
             [task_id]
         )
+
+        io = current_app.extensions.get("socketio")
+        if io:
+            try:
+                io.emit("team_tasks_updated", {
+                    "team_id": team_id,
+                    "action": "status_changed",
+                    "task": updated_task
+                }, to=f"team_{team_id}")
+            except Exception as emit_err:
+                print("Socket emit error:", emit_err)
 
         return jsonify({
             "message": f"Task status updated to {new_status.replace('_', ' ')}.",
