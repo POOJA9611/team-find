@@ -1,125 +1,462 @@
 {% extends "base.html" %}
 
-{% block title %}Idea Originality Checker - Student Project Finder{% endblock %}
+{% block title %}Idea Originality & Differentiation Checker - Student Project Finder{% endblock %}
 
 {% block content %}
-<div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+<div style="max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
 
   <!-- Header Banner -->
   <div class="card" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%); color: #fff; padding: 26px 30px; border-radius: var(--radius-lg);">
-    <h1 style="color: #fff; margin: 0 0 6px 0;">Check Your Project Idea</h1>
-    <p style="color: rgba(255, 255, 255, 0.85); margin: 0; font-size: 13px;">
-      Evaluate conceptual similarity against stored projects in our database before starting your build.
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; margin-bottom: 4px;">
+      College & External Idea Verification
+    </div>
+    <h1 style="color: #fff; margin: 0 0 6px 0;">Student Project Originality Checker</h1>
+    <p style="color: rgba(255, 255, 255, 0.9); margin: 0; font-size: 13.5px; line-height: 1.5;">
+      Discover whether your proposed project idea has already been implemented by seniors in the college or exists in external web repositories. Receive actionable recommendations to differentiate your concept.
     </p>
   </div>
 
-  <!-- Idea Input Form Card -->
+  <!-- Idea Submission Form Card -->
   <div class="card">
-    <div style="margin-bottom: 18px;">
-      <h2>Submit Project Concept</h2>
-      <p class="subtitle" style="margin-bottom: 0;">
-        Enter your proposed project title and description to run a Jaccard token similarity analysis.
-      </p>
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border);">
+      <div>
+        <h2 style="margin: 0; font-size: 18px;">Submit Project Concept for Originality Check</h2>
+        <span style="font-size: 12px; color: var(--color-text-secondary);">
+          Check an idea before creating a project, or verify an existing project excluding self-comparison
+        </span>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="fillExampleAttendance()">
+          Example: Attendance System
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="fillExampleResume()">
+          Example: Resume AI
+        </button>
+      </div>
     </div>
 
-    <form method="POST" action="{{ url_for('originality_checker') }}">
+    <form id="originalityForm" method="POST" action="{{ url_for('originality_checker') }}" onsubmit="showLoadingState()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% if my_projects %}
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label" for="project_id">Check Scope / Target Project (Optional)</label>
+          <select id="project_id" name="project_id" class="form-select" onchange="onProjectSelect(this)">
+            <option value="">-- New Proposed Idea (Not yet created) --</option>
+            {% for p in my_projects %}
+              <option value="{{ p.id }}"
+                      data-title="{{ p.title }}"
+                      data-desc="{{ p.description }}"
+                      {% if exclude_project_id == p.id %}selected{% endif %}>
+                Existing Project: {{ p.title }} (Excludes self-comparison)
+              </option>
+            {% endfor %}
+          </select>
+          <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 3px;">
+            Selecting one of your existing projects automatically excludes that project record from comparing against itself.
+          </div>
+        </div>
+      {% endif %}
 
       <div class="form-group">
         <label class="form-label" for="title">Proposed Project Title *</label>
-        <input type="text" id="title" name="title" class="form-input" required placeholder="e.g. AI-Based Resume Analyzer and Job Matcher" value="{{ title or '' }}">
+        <input type="text" id="title" name="title" class="form-input" required minlength="3"
+               placeholder="e.g. Online Student Attendance System with Face Recognition"
+               value="{{ title or '' }}">
       </div>
 
       <div class="form-group">
         <label class="form-label" for="description">Concept / Problem & Solution Overview *</label>
-        <textarea id="description" name="description" rows="4" class="form-textarea" required placeholder="Describe what problem your system solves, how it functions, and the target audience...">{{ description or '' }}</textarea>
+        <textarea id="description" name="description" rows="4" class="form-textarea" required minlength="10"
+                  placeholder="Describe what specific problem your project solves, core technical architecture, key features, and target user audience...">{{ description or '' }}</textarea>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="fillExampleIdea()">
-          Load Example Idea
-        </button>
-        <button type="submit" class="btn btn-primary">
-          Analyze Idea Originality
+        <div style="font-size: 11.5px; color: var(--color-text-secondary);">
+          Checking an idea does not modify saved projects, create team memberships, or send invitations.
+        </div>
+        <button type="submit" id="submitBtn" class="btn btn-primary" style="min-width: 170px;">
+          Check Originality
         </button>
       </div>
     </form>
+
+    <!-- Interactive Loading Indicator (Hidden until submit) -->
+    <div id="loadingIndicator" style="display: none; padding: 24px 16px; text-align: center; background: var(--color-bg); border-radius: var(--radius-md); margin-top: 20px; border: 1px dashed var(--color-primary);">
+      <div style="font-weight: 700; color: var(--color-primary); font-size: 15px; margin-bottom: 6px;">
+        Evaluating Project Idea Originality...
+      </div>
+      <div style="font-size: 12.5px; color: var(--color-text-secondary);">
+        Searching MySQL college records &bull; Querying external web repositories &bull; Calculating textual similarity &bull; Generating differentiation suggestions...
+      </div>
+    </div>
   </div>
 
-  <!-- Analysis Results Section -->
+  <!-- RESULTS SECTION -->
   {% if checked %}
-    <div class="card" style="border-left: 6px solid {% if highest_score >= 70 %}var(--color-error){% elif highest_score >= 40 %}var(--color-warning){% else %}var(--color-success){% endif %};">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+    <!-- 1. Overall Verdict Status Banner (Section 8 Cases A, B, C, D, E) -->
+    <div class="card" style="border-left: 6px solid {% if case_type in ('A', 'C') %}{% if highest_college_score >= 70 %}var(--color-error){% else %}var(--color-warning){% endif %}{% elif case_type == 'B' %}var(--color-primary){% elif case_type == 'D' %}var(--color-success){% else %}var(--color-warning){% endif %};">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 14px;">
         <div>
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-            <span class="badge {% if highest_score >= 70 %}badge-danger{% elif highest_score >= 40 %}badge-warning{% else %}badge-success{% endif %}" style="font-size: 13px; padding: 4px 10px;">
-              {{ similarity_level }} ({{ highest_score }}% Match)
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span class="badge {{ case_badge_class }}" style="font-size: 12.5px; padding: 4px 12px; font-weight: 700;">
+              {% if case_type == 'A' %}
+                Case A: College & External Matches Found
+              {% elif case_type == 'B' %}
+                Case B: External Matches Only (No College Match)
+              {% elif case_type == 'C' %}
+                Case C: College Match Found
+              {% elif case_type == 'D' %}
+                Case D: No Close Matches Found
+              {% else %}
+                Case E: External Search Incomplete
+              {% endif %}
             </span>
-          </div>
-          <h2>
-            {% if highest_score >= 40 %}
-              Similar project(s) found in our database
-            {% else %}
-              No similar project found in our database
+
+            {% if highest_college_score > 0 %}
+              <span class="badge {% if highest_college_score >= 70 %}badge-danger{% elif highest_college_score >= 40 %}badge-warning{% else %}badge-gray{% endif %}">
+                Highest College Match: {{ highest_college_score }}%
+              </span>
             {% endif %}
-          </h2>
+
+            {% if highest_external_score > 0 %}
+              <span class="badge badge-gray">
+                Highest External Match: {{ highest_external_score }}%
+              </span>
+            {% endif %}
+          </div>
+
+          <h2 style="margin: 0 0 6px 0; font-size: 20px;">{{ case_title }}</h2>
+          <p style="margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--color-text-main);">
+            {{ case_message }}
+          </p>
         </div>
 
-        {% if highest_score < 40 %}
-          <a href="{{ url_for('create_project', title=title, description=description) }}" class="btn btn-success">
+        {% if not exclude_project_id and highest_college_score < 40 %}
+          <a href="{{ url_for('create_project', title=title, description=description) }}" class="btn btn-success" style="font-weight: 700;">
             + Create Project with This Idea
           </a>
         {% endif %}
       </div>
 
-      <!-- Mandatory Honest Platform Scope Disclaimer -->
-      <div style="background-color: var(--color-bg); padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: 20px;">
-        <div style="font-weight: 700; font-size: 12px; color: var(--color-text-main); margin-bottom: 4px;">
-          Platform Scope & Disclaimer
+      <!-- Mandatory Honest Transparency Disclaimer (Section 11) -->
+      <div style="background-color: var(--color-bg); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-top: 10px;">
+        <div style="font-weight: 700; font-size: 11.5px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 3px;">
+          Transparency & Methodology Notice
         </div>
-        <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0; line-height: 1.4;">
-          This originality check compares only records stored within this application's project repository. It is not an internet-wide plagiarism detector and cannot prove global originality or plagiarism.
+        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.45;">
+          Similarity percentages represent an estimate of textual overlap across project titles, descriptions, and technical stacks computed via Jaccard token metrics. Textual similarity is an advisory indicator, not proof of plagiarism, and low similarity does not guarantee worldwide uniqueness.
         </p>
       </div>
+    </div>
 
-      <!-- Matched Database Projects List -->
-      {% if matches %}
-        <div style="font-size: 12px; font-weight: 700; color: var(--color-text-main); text-transform: uppercase; margin-bottom: 10px;">
-          Compared Database Projects ({{ matches|length }})
+    <!-- 2. SECTION: College Project Repository Matches (Section 6) -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border);">
+        <div>
+          <h2 style="margin: 0; font-size: 17px;">1. College Project Repository Matches</h2>
+          <span style="font-size: 12px; color: var(--color-text-secondary);">
+            Searched against stored student project records in MySQL (including senior and alumni projects)
+          </span>
         </div>
+        <span class="badge badge-gray">
+          {{ college_matches|length }} Projects Evaluated
+        </span>
+      </div>
 
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          {% for m in matches %}
-            <div style="padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: #fff;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <strong style="font-size: 14px;">{{ m.title }}</strong>
-                <span class="badge {% if m.score >= 70 %}badge-danger{% elif m.score >= 40 %}badge-warning{% else %}badge-gray{% endif %}">
-                  {{ m.score }}% Similarity ({{ m.level }})
-                </span>
+      <!-- If close college match exists (>= 40%), show prominent advisory warning -->
+      {% if highest_college_score >= 40 %}
+        <div class="alert {% if highest_college_score >= 70 %}alert-error{% else %}alert-warning{% endif %}" style="margin-bottom: 18px;">
+          <strong>Important Advisory:</strong> A similar project already exists in your college repository.
+          Review the existing project records below and consider improving the functionality, solving a different problem, or introducing meaningful features before proceeding.
+        </div>
+      {% endif %}
+
+      {% if college_matches %}
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          {% for cm in college_matches %}
+            <div style="padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: {% if cm.score >= 40 %}#fffbf0{% else %}#fff{% endif %};">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+                <div>
+                  <h3 style="margin: 0 0 3px 0; font-size: 15px;">{{ cm.title }}</h3>
+                  <div style="font-size: 11.5px; color: var(--color-text-secondary);">
+                    Category: <strong>{{ cm.domain }}</strong> &bull;
+                    Student: <strong>{{ cm.owner_name }}</strong> &bull;
+                    Status: <span style="text-transform: capitalize;">{{ cm.status }}</span>
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="badge {% if cm.score >= 70 %}badge-danger{% elif cm.score >= 40 %}badge-warning{% else %}badge-gray{% endif %}" style="font-weight: 700;">
+                    {{ cm.score }}% Similarity &bull; {{ cm.level }}
+                  </span>
+                  {% if cm.id %}
+                    <a href="{{ url_for('view_project_details', project_id=cm.id) }}" class="btn btn-outline btn-sm" target="_blank">
+                      View Project
+                    </a>
+                  {% endif %}
+                </div>
               </div>
-              <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 8px 0; line-height: 1.4;">
-                {{ m.description }}
+
+              <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 10px 0; line-height: 1.45;">
+                {{ cm.description }}
               </p>
-              <div style="font-size: 11px; color: var(--color-text-secondary);">
-                Category: <strong>{{ m.domain }}</strong> &bull; Owner: <strong>{{ m.owner_name }}</strong> &bull; Status: {{ m.status }}
-              </div>
+
+              {% if cm.technologies %}
+                <div style="font-size: 11px; color: var(--color-text-secondary);">
+                  <strong style="color: var(--color-text-main);">Technical Stack:</strong> {{ cm.technologies }}
+                </div>
+              {% endif %}
             </div>
           {% endfor %}
         </div>
       {% else %}
-        <p style="font-size: 13px; color: var(--color-text-secondary);">
-          No existing projects were found in the database for comparison.
-        </p>
+        <div class="empty-state" style="padding: 24px 10px;">
+          <p>No existing projects were found in the college database records searched.</p>
+        </div>
       {% endif %}
+    </div>
+
+    <!-- 3. SECTION: External Web & Open-Source Matches (Section 7) -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border);">
+        <div>
+          <h2 style="margin: 0; font-size: 17px;">2. External Web & Open-Source Matches</h2>
+          <span style="font-size: 12px; color: var(--color-text-secondary);">
+            Searched outside the college across public software repositories and web sources
+          </span>
+        </div>
+        <span class="badge badge-gray">
+          {{ external_matches|length }} Results Retrieved
+        </span>
+      </div>
+
+      {% if external_error %}
+        <div class="alert alert-warning" style="margin-bottom: 16px;">
+          <strong>External Search Notice:</strong> External web checking could not be completed at this time ({{ external_error }}). College records have been evaluated. An incomplete external search is never treated as evidence of worldwide originality.
+        </div>
+      {% elif external_matches %}
+        {% if highest_college_score < 40 %}
+          <div class="alert alert-info" style="margin-bottom: 16px;">
+            Related project ideas were found outside your college, but no sufficiently similar project was found in the college records searched. Consider adding distinctive features, targeting a specific user group or solving a more specific problem.
+          </div>
+        {% endif %}
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          {% for em in external_matches %}
+            <div style="padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: #fff;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+                <div>
+                  <h3 style="margin: 0 0 3px 0; font-size: 15px;">{{ em.title }}</h3>
+                  <div style="font-size: 11.5px; color: var(--color-text-secondary);">
+                    Source: <strong>{{ em.source_website }}</strong> &bull;
+                    Domain: <code>{{ em.domain }}</code>
+                    {% if em.language and em.language != 'General' %}
+                      &bull; Language: <strong>{{ em.language }}</strong>
+                    {% endif %}
+                    {% if em.stars and em.stars > 0 %}
+                      &bull; ⭐ {{ em.stars }}
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  {% if em.similarity_percentage is not none and em.similarity_percentage > 0 %}
+                    <span class="badge badge-gray" style="font-weight: 700;">
+                      {{ em.similarity_percentage }}% Text Overlap
+                    </span>
+                  {% else %}
+                    <span class="badge badge-gray">
+                      Related Web Result
+                    </span>
+                  {% endif %}
+
+                  {% if em.url %}
+                    <a href="{{ em.url }}" class="btn btn-outline btn-sm" target="_blank" rel="noopener noreferrer">
+                      Visit Source ↗
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
+
+              <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0; line-height: 1.45;">
+                {{ em.snippet }}
+              </p>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="padding: 24px 10px;">
+          <p>No sufficiently similar project implementations were returned by external search for this query.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- 4. SECTION: Recommended Unique Differentiating Features (Section 9) -->
+    {% if unique_features %}
+      <div class="card">
+        <div style="margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border);">
+          <h2 style="margin: 0 0 4px 0; font-size: 17px;">3. Recommended Unique Differentiating Features</h2>
+          <span style="font-size: 12px; color: var(--color-text-secondary);">
+            Practical, high-impact capabilities to differentiate your project from college and external implementations
+          </span>
+        </div>
+
+        <div class="grid-2">
+          {% for uf in unique_features %}
+            <div style="padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-weight: 700; font-size: 14px; color: var(--color-primary);">
+                ✦ {{ uf.feature }}
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-main); line-height: 1.45;">
+                <strong style="color: var(--color-text-secondary);">Motivation & Limitation:</strong>
+                {{ uf.motivation }}
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-main); line-height: 1.45;">
+                <strong style="color: var(--color-text-secondary);">How it Differentiates:</strong>
+                {{ uf.uniqueness }}
+              </div>
+              <div style="font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.4;">
+                <strong>User Benefit:</strong> {{ uf.user_relevance }} &bull;
+                <strong>Student Feasibility:</strong> {{ uf.feasibility }}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- 5. SECTION: Suggested Improved Project Proposal (Section 10) -->
+    {% if improved_idea %}
+      <div class="card" style="border: 2px solid var(--color-primary); background: #fcfdff;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+          <div>
+            <span class="badge badge-primary" style="margin-bottom: 6px; font-weight: 700;">
+              Suggested Differentiated Concept
+            </span>
+            <h2 style="margin: 0; font-size: 18px; color: var(--color-primary);">
+              {{ improved_idea.revised_title }}
+            </h2>
+          </div>
+
+          <a href="{{ url_for('create_project', title=improved_idea.revised_title, description=improved_idea.revised_description) }}"
+             class="btn btn-success" style="font-weight: 700;">
+            + Create Project with This Improved Idea
+          </a>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px;">
+            Concise Revised Description:
+          </div>
+          <p style="font-size: 13.5px; color: var(--color-text-main); line-height: 1.5; margin: 0;">
+            {{ improved_idea.revised_description }}
+          </p>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+            Key Differentiating Capabilities:
+          </div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; color: var(--color-text-main); line-height: 1.5;">
+            {% for diff in improved_idea.differentiators %}
+              <li>{{ diff }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        <div style="background: rgba(43, 90, 235, 0.06); padding: 12px 14px; border-radius: var(--radius-md); font-size: 12px; color: var(--color-text-secondary); line-height: 1.45;">
+          <strong style="color: var(--color-primary);">Advisory Notice:</strong>
+          These suggestions are strictly advisory and feasible for a final-year student project. Stored projects are never overwritten automatically. You can choose to adopt this enhanced direction or proceed with your original proposal.
+        </div>
+      </div>
+    {% endif %}
+
+  {% endif %}
+
+  <!-- 6. SECTION: Recent Originality Checks History (Section 13) -->
+  {% if recent_checks %}
+    <div class="card">
+      <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--color-border);">
+        <h3 style="margin: 0; font-size: 15px;">Your Recent Originality Check Reports</h3>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Submitted Idea Title</th>
+              <th>College Match</th>
+              <th>External Match</th>
+              <th>Checked On</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rc in recent_checks %}
+              <tr>
+                <td><strong>{{ rc.submitted_title }}</strong></td>
+                <td>
+                  <span class="badge {% if rc.highest_college_similarity >= 70 %}badge-danger{% elif rc.highest_college_similarity >= 40 %}badge-warning{% else %}badge-success{% endif %}">
+                    {{ rc.highest_college_similarity }}%
+                  </span>
+                </td>
+                <td>
+                  <span class="badge badge-gray">
+                    {{ rc.highest_external_similarity }}%
+                  </span>
+                </td>
+                <td style="font-size: 11.5px; color: var(--color-text-secondary);">
+                  {{ rc.checked_at }}
+                </td>
+                <td style="text-align: right;">
+                  <a href="{{ url_for('view_originality_report', check_id=rc.id) }}" class="btn btn-outline btn-sm">
+                    View Report
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   {% endif %}
 
 </div>
 
 <script>
-  function fillExampleIdea() {
-    document.getElementById('title').value = 'AI-Based Resume Analyzer and Job Matcher';
-    document.getElementById('description').value = 'An intelligent web platform that parses student resumes, extracts technical programming skills, and matches student profiles with relevant entry-level software job roles using natural language processing.';
+  function fillExampleAttendance() {
+    document.getElementById('title').value = 'Online Student Attendance System';
+    document.getElementById('description').value = 'A web application to automate student roll-call in college classrooms, track student absenteeism, and generate monthly departmental attendance percentage reports.';
+    const sel = document.getElementById('project_id');
+    if (sel) sel.value = '';
+  }
+
+  function fillExampleResume() {
+    document.getElementById('title').value = 'AI Resume Screening & Ranking Engine';
+    document.getElementById('description').value = 'An intelligent resume evaluation system that parses candidate CVs, extracts technical proficiencies, and matches candidate skills against job requirement descriptors.';
+    const sel = document.getElementById('project_id');
+    if (sel) sel.value = '';
+  }
+
+  function onProjectSelect(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.value) {
+      document.getElementById('title').value = opt.getAttribute('data-title') || '';
+      document.getElementById('description').value = opt.getAttribute('data-desc') || '';
+    }
+  }
+
+  function showLoadingState() {
+    const btn = document.getElementById('submitBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Analyzing Concept...';
+    }
+    const indicator = document.getElementById('loadingIndicator');
+    if (indicator) {
+      indicator.style.display = 'block';
+    }
   }
 </script>
 {% endblock %}

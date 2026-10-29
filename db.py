@@ -186,7 +186,7 @@ class DatabaseManager:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
             checked_by INTEGER NOT NULL,
-            trigger_event TEXT NOT NULL DEFAULT 'team_formed',
+            trigger_event TEXT NOT NULL DEFAULT 'manual_check',
             compared_count INTEGER NOT NULL DEFAULT 0,
             highest_similarity REAL NOT NULL DEFAULT 0.0,
             closest_project_id INTEGER NULL,
@@ -197,6 +197,34 @@ class DatabaseManager:
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (checked_by) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (closest_project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS originality_checks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            project_id INTEGER NULL,
+            submitted_title TEXT NOT NULL,
+            submitted_description TEXT NOT NULL,
+            highest_college_similarity INTEGER NOT NULL DEFAULT 0,
+            highest_external_similarity INTEGER NOT NULL DEFAULT 0,
+            status TEXT CHECK(status IN ('completed', 'partial', 'failed')) NOT NULL DEFAULT 'completed',
+            checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS originality_check_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            check_id INTEGER NOT NULL,
+            source_type TEXT CHECK(source_type IN ('college', 'external')) NOT NULL,
+            matched_project_id INTEGER NULL,
+            source_title TEXT NOT NULL,
+            source_url TEXT NULL,
+            source_description TEXT,
+            similarity_percentage INTEGER NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (check_id) REFERENCES originality_checks(id) ON DELETE CASCADE,
+            FOREIGN KEY (matched_project_id) REFERENCES projects(id) ON DELETE SET NULL
         );
         """)
         # Ensure updated_at exists on users

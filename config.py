@@ -18,3 +18,7 @@ class Config:
     # Local SQLite Fallback Configuration
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     SQLITE_PATH = os.path.join(BASE_DIR, "student_project_finder.sqlite")
+
+    # External Web Search Configuration (Section 7)
+    EXTERNAL_SEARCH_API_KEY = os.getenv("EXTERNAL_SEARCH_API_KEY", "")
+    EXTERNAL_SEARCH_PROVIDER = os.getenv("EXTERNAL_SEARCH_PROVIDER", "github_public")

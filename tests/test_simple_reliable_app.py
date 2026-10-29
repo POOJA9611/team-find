@@ -433,13 +433,13 @@ class TestSimpleReliableApp(unittest.TestCase):
         self.assertEqual(t_after["status"], "completed")
 
     # -------------------------------------------------------------
-    # 9. Originality Checker (Module 10)
+    # 9. Originality Checker & Web Evidence Engine (Module 10 & Master Specs)
     # -------------------------------------------------------------
     def test_09_originality_checker(self):
         self.login_user("maya@student.edu", "Student@2026")
         csrf = self.get_session_csrf(self.client)
 
-        # Test idea with high similarity to existing "AI Resume Screening & Ranking Engine"
+        # 1. Test idea with high similarity to Alex's existing college project
         similar_query = {
             "title": "AI Resume Screening and Ranking Engine",
             "description": "An intelligent resume evaluation system that parses candidate CVs, extracts technical proficiencies, and matches against job requirement descriptors.",
@@ -448,11 +448,63 @@ class TestSimpleReliableApp(unittest.TestCase):
         res_check = self.client.post("/originality", data=similar_query, follow_redirects=True)
         content = res_check.get_data(as_text=True)
 
-        self.assertIn("Check Your Project Idea", content)
-        self.assertIn("Similar project(s) found in our database", content)
-        self.assertIn("Disclaimer", content)
+        self.assertIn("Student Project Originality Checker", content)
+        self.assertIn("College Project Repository Matches", content)
+        self.assertIn("A similar project already exists in your college", content)
+        self.assertIn("External Web", content)
+        self.assertIn("Open-Source Matches", content)
+        self.assertIn("Recommended Unique Differentiating Features", content)
+        self.assertIn("Suggested Differentiated Concept", content)
 
-        # Test novel idea
+        # Verify record was persisted in originality_checks and originality_check_results
+        saved_check = db.query_one(
+            "SELECT * FROM originality_checks WHERE submitted_title = %s ORDER BY checked_at DESC",
+            (similar_query["title"],)
+        )
+        self.assertIsNotNone(saved_check)
+        self.assertGreaterEqual(saved_check["highest_college_similarity"], 40)
+
+        results = db.query_all(
+            "SELECT * FROM originality_check_results WHERE check_id = %s",
+            (saved_check["id"],)
+        )
+        self.assertGreater(len(results), 0)
+
+        # 2. Test viewing saved report (/originality/report/<id>)
+        res_report = self.client.get(f"/originality/report/{saved_check['id']}")
+        self.assertEqual(res_report.status_code, 200)
+        self.assertIn("Suggested Differentiated Concept", res_report.get_data(as_text=True))
+
+        # 3. Test unauthorized report access (Liam cannot view Maya's report)
+        liam_client = app.test_client()
+        self.login_user("liam@student.edu", "Student@2026", liam_client)
+        res_unauth = liam_client.get(f"/originality/report/{saved_check['id']}")
+        self.assertEqual(res_unauth.status_code, 403)
+
+        # 4. Test self-comparison exclusion
+        alex_user = db.query_one("SELECT id FROM users WHERE email = 'alex@student.edu'")
+        alex_proj = db.query_one("SELECT id, title, description FROM projects WHERE owner_id = %s", (alex_user["id"],))
+        self.assertIsNotNone(alex_proj)
+
+        alex_client = app.test_client()
+        self.login_user("alex@student.edu", "Student@2026", alex_client)
+        alex_csrf = self.get_session_csrf(alex_client)
+
+        res_self_exclude = alex_client.post(
+            "/originality",
+            data={
+                "title": alex_proj["title"],
+                "description": alex_proj["description"],
+                "project_id": str(alex_proj["id"]),
+                "csrf_token": alex_csrf
+            },
+            follow_redirects=True
+        )
+        content_self = res_self_exclude.get_data(as_text=True)
+        # Excludes itself, so Alex's own project is not in the matches list as a match against itself
+        self.assertNotIn(f"data-self-id='{alex_proj['id']}'", content_self)
+
+        # 5. Test novel idea
         novel_csrf = self.get_session_csrf(self.client)
         novel_query = {
             "title": "Deep Sea Hydrothermal Vent Acoustic Sensor Network",
@@ -462,8 +514,7 @@ class TestSimpleReliableApp(unittest.TestCase):
         res_novel = self.client.post("/originality", data=novel_query, follow_redirects=True)
         content_novel = res_novel.get_data(as_text=True)
 
-        self.assertIn("No similar project found in our database", content_novel)
-        self.assertIn("Disclaimer", content_novel)
+        self.assertIn("Methodology Notice", content_novel)
 
     # -------------------------------------------------------------
     # 10. Admin Dashboard & Student Management (Module 11)
@@ -618,16 +669,16 @@ class TestSimpleReliableApp(unittest.TestCase):
         self.assertIsNone(m_mem)
 
     # -------------------------------------------------------------
-    # 12. Automatic Project Idea Storage & Originality Checking
+    # 12. Project Storage & Manual Originality Checking Flow (Master Specs)
     # -------------------------------------------------------------
-    def test_12_automatic_team_formation_originality_check(self):
+    def test_12_project_creation_and_manual_originality_flow(self):
         # Create a 2-person project by Maya
         maya_client = app.test_client()
         self.login_user("maya@student.edu", "Student@2026", maya_client)
         maya_csrf = self.get_session_csrf(maya_client)
         maya_user = db.query_one("SELECT * FROM users WHERE email = 'maya@student.edu'")
 
-        # Create project with similar idea to "AI Resume Screening & Ranking Engine"
+        # 1. Project creation immediately saves to MySQL projects table
         proj_data = {
             "title": "Smart AI Candidate Resume Screening & Ranking",
             "description": "An automated resume screening tool that extracts candidate skills, compares with job descriptions, and calculates match rankings.",
@@ -639,15 +690,20 @@ class TestSimpleReliableApp(unittest.TestCase):
         res_create = maya_client.post("/projects/create", data=proj_data, follow_redirects=True)
         new_proj = db.query_one("SELECT * FROM projects WHERE title = %s", (proj_data["title"],))
         self.assertIsNotNone(new_proj)
+        self.assertEqual(new_proj["owner_id"], maya_user["id"])
 
-        # Team is not yet full (1/2 members), so automatic check has not run yet
-        check_before = db.query_one(
-            "SELECT * FROM project_originality_checks WHERE project_id = %s AND trigger_event = 'team_formed'",
-            (new_proj["id"],)
+        # 2. Prevent duplicate project creation caused by repeated submissions (Section 3)
+        res_dup = maya_client.post("/projects/create", data=proj_data, follow_redirects=True)
+        self.assertIn("already created a project titled", res_dup.get_data(as_text=True))
+
+        # 3. Verify originality checking does NOT trigger automatically on creation
+        auto_check = db.query_one(
+            "SELECT * FROM originality_checks WHERE submitted_title = %s",
+            (proj_data["title"],)
         )
-        self.assertIsNone(check_before)
+        self.assertIsNone(auto_check)
 
-        # Pooja applies to join Maya's project
+        # 4. Pooja applies and Maya accepts -> Team formation does NOT trigger automatic check
         pooja_user = db.query_one("SELECT * FROM users WHERE email = 'pooja@student.edu'")
         pooja_client = app.test_client()
         self.login_user("pooja@student.edu", "Student@2026", pooja_client)
@@ -664,7 +720,6 @@ class TestSimpleReliableApp(unittest.TestCase):
         )
         self.assertIsNotNone(app_record)
 
-        # Maya accepts Pooja -> Team reaches 2/2 (fully formed!)
         maya_csrf = self.get_session_csrf(maya_client)
         res_accept = maya_client.post(
             f"/applications/{app_record['id']}/decide",
@@ -673,32 +728,37 @@ class TestSimpleReliableApp(unittest.TestCase):
         )
         self.assertIn("Application accepted", res_accept.get_data(as_text=True))
 
-        # Verify automatic originality check was triggered and saved in DB
-        orig_check = db.query_one(
-            "SELECT * FROM project_originality_checks WHERE project_id = %s AND trigger_event = 'team_formed'",
+        # Check that team is full (2/2 members)
+        member_count = db.query_one(
+            "SELECT COUNT(*) as count FROM team_members WHERE project_id = %s",
             (new_proj["id"],)
+        )["count"]
+        self.assertEqual(member_count, 2)
+
+        # 5. Originality check runs on demand when user clicks Check Originality
+        res_manual_check = maya_client.post(
+            "/originality",
+            data={
+                "title": new_proj["title"],
+                "description": new_proj["description"],
+                "project_id": str(new_proj["id"]),
+                "csrf_token": maya_csrf
+            },
+            follow_redirects=True
         )
-        self.assertIsNotNone(orig_check)
-        self.assertGreater(orig_check["compared_count"], 0)
-        self.assertIsNotNone(orig_check["closest_project_title"])
-        # Exclude self-comparison: check that closest_project_id is NOT new_proj["id"]
-        self.assertNotEqual(orig_check["closest_project_id"], new_proj["id"])
+        content_manual = res_manual_check.get_data(as_text=True)
+        self.assertIn("Student Project Originality Checker", content_manual)
+        self.assertIn("College Project Repository Matches", content_manual)
+        self.assertIn("Recommended Unique Differentiating Features", content_manual)
 
-        # Check Maya's dashboard displays the Automatic Originality Checks section
-        res_dash = maya_client.get("/student/dashboard")
-        dash_content = res_dash.get_data(as_text=True)
-        self.assertIn("Automatic Originality Checks", dash_content)
-        self.assertIn("Trigger: <strong>Team formed</strong>", dash_content)
-        self.assertIn("honest platform text similarity check", dash_content)
-
-        # Test manual recheck route
-        maya_csrf = self.get_session_csrf(maya_client)
+        # 6. Test manual recheck route redirects to originality checker
         res_recheck = maya_client.post(
             f"/projects/{new_proj['id']}/originality-check",
             data={"csrf_token": maya_csrf},
             follow_redirects=True
         )
-        self.assertIn("Originality recheck completed", res_recheck.get_data(as_text=True))
+        self.assertEqual(res_recheck.status_code, 200)
+        self.assertIn("Student Project Originality Checker", res_recheck.get_data(as_text=True))
 
     # -------------------------------------------------------------
     # 13. Invitation Module: Sent & Received Pages with Status Filters

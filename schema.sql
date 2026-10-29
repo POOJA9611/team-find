@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS project_originality_checks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
     checked_by INT NOT NULL,
-    trigger_event VARCHAR(50) NOT NULL DEFAULT 'team_formed',
+    trigger_event VARCHAR(50) NOT NULL DEFAULT 'manual_check',
     compared_count INT NOT NULL DEFAULT 0,
     highest_similarity FLOAT NOT NULL DEFAULT 0.0,
     closest_project_id INT NULL,
@@ -168,4 +168,36 @@ CREATE TABLE IF NOT EXISTS project_originality_checks (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (checked_by) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (closest_project_id) REFERENCES projects(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 12. Student Idea Originality Checks History Table
+CREATE TABLE IF NOT EXISTS originality_checks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    project_id INT NULL,
+    submitted_title VARCHAR(255) NOT NULL,
+    submitted_description TEXT NOT NULL,
+    highest_college_similarity INT NOT NULL DEFAULT 0,
+    highest_external_similarity INT NOT NULL DEFAULT 0,
+    status ENUM('completed', 'partial', 'failed') NOT NULL DEFAULT 'completed',
+    checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_orig_chk_student (student_id),
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 13. Originality Check Match Results Table (College and External Web Sources)
+CREATE TABLE IF NOT EXISTS originality_check_results (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    check_id INT NOT NULL,
+    source_type ENUM('college', 'external') NOT NULL,
+    matched_project_id INT NULL,
+    source_title VARCHAR(255) NOT NULL,
+    source_url VARCHAR(500) NULL,
+    source_description TEXT,
+    similarity_percentage INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_orig_res_check (check_id),
+    FOREIGN KEY (check_id) REFERENCES originality_checks(id) ON DELETE CASCADE,
+    FOREIGN KEY (matched_project_id) REFERENCES projects(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
