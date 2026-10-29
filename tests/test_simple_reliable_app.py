@@ -478,6 +478,13 @@ class TestSimpleReliableApp(unittest.TestCase):
         self.assertIn("Alex Chen", content)
         self.assertIn("Maya Patel", content)
 
+        # Verify Workspace Tasks statistics card
+        self.assertIn("Workspace Tasks", content)
+        db_total_tasks = db.query_one("SELECT COUNT(*) as count FROM tasks t JOIN projects p ON t.project_id = p.id")["count"]
+        db_completed_tasks = db.query_one("SELECT COUNT(*) as count FROM tasks t JOIN projects p ON t.project_id = p.id WHERE LOWER(t.status) = 'completed'")["count"]
+        self.assertIn(f">{db_total_tasks}<", content)
+        self.assertIn(f"{db_completed_tasks} Tasks Completed", content)
+
     # -------------------------------------------------------------
     # 11. Student Applications to Join Existing Projects
     # -------------------------------------------------------------

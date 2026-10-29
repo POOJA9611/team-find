@@ -1994,8 +1994,18 @@ def admin_dashboard():
     total_students = approved_count
     total_projects = get_count("SELECT COUNT(*) as count FROM projects")
     open_projects = get_count("SELECT COUNT(*) as count FROM projects WHERE status = 'open'")
-    total_tasks = get_count("SELECT COUNT(*) as count FROM tasks")
-    completed_tasks = get_count("SELECT COUNT(*) as count FROM tasks WHERE status = 'completed'")
+    # Workspace tasks across actual student project workspaces
+    total_tasks = get_count(
+        """SELECT COUNT(*) as count
+           FROM tasks t
+           JOIN projects p ON t.project_id = p.id"""
+    )
+    completed_tasks = get_count(
+        """SELECT COUNT(*) as count
+           FROM tasks t
+           JOIN projects p ON t.project_id = p.id
+           WHERE LOWER(t.status) = 'completed'"""
+    )
 
     stats = {
         "total_students": total_students,
