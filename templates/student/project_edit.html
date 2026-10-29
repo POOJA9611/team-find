@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Project - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 720px; margin: 20px auto 0 auto;">
+  <div class="card">
+    <div style="margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1>Edit Project Settings</h1>
+        <p class="subtitle" style="margin-bottom: 0;">Update requirements or close team recruitment</p>
+      </div>
+      <span class="badge {% if project.status == 'open' %}badge-success{% else %}badge-gray{% endif %}">
+        Status: {{ project.status }}
+      </span>
+    </div>
+
+    <form method="POST" action="{{ url_for('edit_project', project_id=project.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="title">Project Title *</label>
+        <input type="text" id="title" name="title" class="form-input" required value="{{ project.title }}">
+      </div>
+
+      <div class="grid-3">
+        <div class="form-group">
+          <label class="form-label" for="domain">Domain / Category *</label>
+          <select id="domain" name="domain" class="form-select" required>
+            {% for d in ["Artificial Intelligence", "Machine Learning", "Web Development", "Mobile Development", "Cybersecurity", "Cloud Computing", "IoT", "Data Science", "Blockchain", "Healthcare", "Education", "Finance"] %}
+              <option value="{{ d }}" {% if project.domain == d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="max_members">Max Team Size</label>
+          <select id="max_members" name="max_members" class="form-select" required>
+            {% for m in range(2, 7) %}
+              <option value="{{ m }}" {% if project.max_members == m %}selected{% endif %}>{{ m }} Members</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="status">Project Status *</label>
+          <select id="status" name="status" class="form-select" required>
+            <option value="open" {% if project.status == 'open' %}selected{% endif %}>Open (Recruiting)</option>
+            <option value="closed" {% if project.status == 'closed' %}selected{% endif %}>Closed (No New Members)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="required_skills">Required Skills (Comma-separated) *</label>
+        <input type="text" id="required_skills" name="required_skills" class="form-input" required value="{{ req_skills_str }}">
+        <div class="form-help">Updating required skills immediately recalculates teammate match rankings.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="description">Project Description *</label>
+        <textarea id="description" name="description" rows="4" class="form-textarea" required>{{ project.description }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+        <a href="{{ url_for('find_teammates', project_id=project.id) }}" class="btn btn-outline">
+          &larr; Back to Find Teammates
+        </a>
+        <div style="display: flex; gap: 10px;">
+          <a href="{{ url_for('student_dashboard') }}" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

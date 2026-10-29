@@ -1,181 +1,181 @@
-# Smart Real-Time Project Team Finder System
+# Student Project Finder & Originality Checker
 
-> **Technology Migration Edition**: Full-stack academic web platform for college department capstone project guidance, faculty mentee allocations, skill-based team formation, and real-time collaboration.
-> Migrated from *Node.js / Express / SQLite / React 18* to **Python Flask / MySQL / Vanilla JavaScript (HTML5 + CSS3 + ES6)** with **100% functional, UI/UX, and data model preservation**.
+> **Simple, Functional and Reliable** academic collaboration and project originality checking platform for college students and administrators.
+> Built strictly with **HTML5, CSS3, Vanilla JavaScript, Python Flask, and MySQL** (with zero-configuration SQLite local fallback).
 
 ---
 
-## 🚀 Migrated Technology Stack
+## 📌 Main Idea & Purpose
 
-| Component | Original Technology | **New Migrated Technology** |
+College students are required to complete academic projects every year. Before starting a project, students face three major challenges:
+1. They don't know whether their project idea has already been created by someone else in the institution.
+2. They spend excessive time searching for suitable project ideas and understanding what other students have built.
+3. They have difficulty finding suitable teammates with complementary skills.
+
+**Student Project Finder & Originality Checker** solves all three problems in one unified, reliable platform:
+- **Check Project Originality**: Instant conceptual comparison against existing projects using Jaccard word-token similarity with clear, honest platform disclaimers.
+- **Discover Projects**: Search and filter past and ongoing student projects across domains without exposing source code.
+- **Find Teammates**: Mathematical skill-matching formula $(Matched / Required) \times 100$ ranking eligible candidates into Excellent, Good, Partial, and Low matches.
+- **Simple Team Workspace**: Lightweight task progress tracking without complicated third-party tooling.
+
+---
+
+## 🛠️ Strict Technology Stack
+
+| Layer | Technology | Description |
 | :--- | :--- | :--- |
-| **Frontend Runtime** | React 18, Vite 5, JSX | **HTML5, CSS3, Vanilla JavaScript (ES6 Modules)** |
-| **State & Interactivity**| React Context, useState, useEffect | **Vanilla JS State Store (`auth.js`), DOM event listeners, Fetch API** |
-| **Icons & Design** | Lucide React / Font Awesome | **Font Awesome 6 (CDN), Deep Indigo CSS Tokens, Flexbox & CSS Grid** |
-| **Real-Time Client** | Socket.IO Client (npm package) | **Socket.IO Client (CDN `socket.io.min.js`), Custom event bridge** |
-| **Backend Runtime** | Node.js 20+, Express 5 | **Python 3.12+, Flask 3.0+** |
-| **WebSockets** | Socket.IO (npm `socket.io`) | **Flask-SocketIO (with `simple-websocket` / threading)** |
-| **Authentication** | JWT (`jsonwebtoken`), bcryptjs | **PyJWT (HS256 Bearer auth), bcrypt / Werkzeug hashing** |
-| **Rate Limiting & CORS**| `express-rate-limit`, `cors` | **Flask-Limiter, Flask-CORS** |
-| **Database** | SQLite3 (`sqlite` async driver) | **MySQL 8.0+ (PyMySQL driver) with dual SQLite dev fallback** |
-| **Database Schema** | Relational SQLite Schema | **ANSI MySQL Schema (`database/schema.sql`, InnoDB, Foreign Keys)** |
+| **Frontend** | HTML5, CSS3, Vanilla JavaScript | Semantic markup, custom responsive CSS (Deep Indigo & Charcoal theme), vanilla DOM manipulation. **Zero external UI frameworks** (no React, Angular, Vue, Bootstrap, or Tailwind). |
+| **Backend** | Python Flask (Jinja2) | Multi-page server-rendered application with session-based authentication, CSRF validation, and parameterized database queries. |
+| **Database** | MySQL 8.0+ / SQLite3 | Normalized relational database using MySQL syntax (`schema.sql`). Automatically activates local SQLite (`student_project_finder.sqlite`) if MySQL is inactive. |
 
 ---
 
-## 👥 Roles & Governance Rules (Strictly Preserved)
+## 👥 System Roles & Approval Rules
 
-The system enforces three strict roles on both the backend middleware and ownership layer:
+The platform enforces exactly **two** global system roles:
 
-| Role | Creation Method | Privileges & Governance Rules |
-| :--- | :--- | :--- |
-| **HOD (Admin)** | **Seed Script Only** (`python backend/seed.py`) | Exactly **one** official HOD account (`hod.cs@college.edu`). Can **never** be registered via signup. Views department-wide directories, assigns/reassigns students to faculty based on workload & skills, approves/rejects change requests, posts targeted notifications. **Strictly CANNOT create, edit, import (no CSV), or delete student/faculty accounts.** |
-| **FACULTY** | **Public Signup** | Mentor accounts require an email matching the college domain (`@college.edu`). Faculty manage only their assigned students, form project teams, mentor students in dedicated group chats, and edit their research profiles. |
-| **STUDENT** | **Public Signup** | Students manage their portfolio and projects, chat with teammates and their mentor in their assigned team group, view faculty research profiles, read role-filtered notices, and submit mentor change requests to the HOD. Cannot access other students' private data or other teams' chats. |
+### 1. Student
+- **Registration**: Submits account request; starts with `status = 'pending'`. Cannot log in until approved.
+- **Profile**: Manages academic details (Department, Semester, Section, Bio, Interests) and individual skills.
+- **Projects**: Creates and manages projects (Title, Domain, Description, Problem Statement, Solution, Required Skills, Team Capacity).
+- **Find Teammates**: Project owners find candidates matched by skill overlap and send invitations.
+- **Invitations**: Students accept or reject invitations on their dashboard.
+- **Workspace**: Project members track task progress (`to_do`, `in_progress`, `completed`).
+- **Originality Checker**: Checks proposed project concepts against stored database records.
 
----
+### 2. Admin
+- **Protected Setup**: Initial Admin account created securely via CLI (`python seed_admin.py`). Public admin registration is disabled.
+- **Account Governance**: Reviews pending student requests; approves or declines accounts.
+- **Student Directory**: Inspects registered students, departments, and skill counts.
+- **Platform Analytics**: Views total student counts, active projects, and workspace tasks.
 
-## 📁 Migrated Project Structure
-
-```
-pooja/
-├── app.py                         # Main Flask Application & Socket.IO server entry point
-├── START-PORTAL.bat               # Windows one-click launcher (Flask + Browser)
-├── run.bat                        # Shortcut alias for START-PORTAL.bat
-├── requirements.txt               # Pinned Python package dependencies
-├── .env                           # Active environment configuration
-├── .env.example                   # Environment variable template
-├── backend/                       # Python Flask backend package
-│   ├── database.py                # Dual MySQL / SQLite connection manager with ? to %s translation
-│   ├── seed.py                    # Official HOD account seeder (HodPass@2026)
-│   ├── demo_seed.py               # Complete demo seeder (HOD, faculty, students, teams, chats)
-│   ├── middleware/
-│   │   └── auth.py                # PyJWT Bearer validation, bcrypt hashing, role guard
-│   ├── routes/
-│   │   ├── auth_routes.py         # /api/auth (signup, login, me)
-│   │   ├── hod_routes.py          # /api/hod (stats, directory, assignments, change requests, team review)
-│   │   ├── faculty_routes.py      # /api/faculty (my-students, profile)
-│   │   ├── student_routes.py      # /api/student (profile, projects, change requests, faculty list)
-│   │   ├── teams_routes.py        # /api/teams (team creation, membership, proposals, join requests)
-│   │   ├── chat_routes.py         # /api/chat (channels, messages, 403 membership verification)
-│   │   └── notifications_routes.py# /api/notifications (list, read, mark-all-read, create)
-│   ├── sockets/
-│   │   └── socket_handler.py      # Authenticated Socket.IO rooms & real-time messaging
-│   └── utils/
-│       ├── validators.py          # Email, @college.edu domain, GitHub/LinkedIn regex validators
-│       └── recommendations.py     # Algorithmic student-team and faculty matching logic
-├── database/                      # Database scripts
-│   ├── schema.sql                 # Complete MySQL DDL schema (InnoDB, UTF8MB4, constraints)
-│   └── migrate_sqlite_to_mysql.py # SQLite-to-MySQL live data migration utility
-├── templates/                     # Flask Jinja2 HTML templates
-│   └── index.html                 # Single-page application shell (Vanilla JS mounted)
-├── static/                        # Static assets (No build tools or bundlers needed)
-│   ├── css/
-│   │   ├── style.css              # Color tokens, reset, typography, cards
-│   │   ├── components.css         # Buttons, badges, tables, modals, avatars
-│   │   └── responsive.css         # Tablet and mobile responsive media queries
-│   ├── js/                        # Vanilla ES6 JavaScript modules
-│   │   ├── api.js                 # Central Fetch API client with Bearer token injection
-│   │   ├── auth.js                # Auth state management & 1-click persona switcher
-│   │   ├── socket.js              # Real-time WebSocket connection manager & toast alerts
-│   │   ├── router.js              # Client-side router & role-based sidebar manager
-│   │   ├── app.js                 # Application bootstrap & topbar interaction coordinator
-│   │   └── views/
-│   │       ├── auth_views.js      # Login and signup views
-│   │       ├── hod_views.js       # Executive dashboard, assignments, change requests, directory
-│   │       ├── faculty_views.js   # Faculty overview, assigned students, capstone teams, profile
-│   │       ├── student_views.js   # Student dashboard, portfolio & projects, teams, directory
-│   │       ├── chat_view.js       # Real-time group messaging workspace with live participants
-│   │       ├── notifications_view.js # Department announcements and submission deadlines
-│   │       └── modals.js          # Faculty research inspection modal
-├── tests/
-│   └── test_self_check.py         # 7-Flow end-to-end automated verification test suite
-└── team/                          # Original unmodified reference source project (preserved)
-```
+> **Academic Integrity & Privacy Rule**: Faculty approval is completely omitted. There is **zero source code exposure** or code download capability anywhere on the platform.
 
 ---
 
-## 🗄️ Database Setup & MySQL Migration
+## 📊 Mathematical Algorithms
 
-### 1. MySQL Schema Setup
-Ensure your MySQL server is running (default port `3306`), then run:
-```bash
-mysql -u root -p < database/schema.sql
-```
-This creates the database `college_portal` with all 15 relational tables, cascading foreign keys, and indexes.
+### 1. Teammate Skill Matching Formula
+For a given project requiring distinct technical skills:
 
-### 2. Live Data Migration from SQLite to MySQL
-To migrate existing SQLite data into your MySQL database without losing records or relationships:
-```bash
-python database/migrate_sqlite_to_mysql.py
-```
+$$\text{Match Percentage} = \text{round}\left( \frac{\text{Distinct Matched Required Skills}}{\text{Total Distinct Required Skills}} \times 100 \right)$$
 
-### 3. Graceful Fallback Mode
-If MySQL is not installed or currently offline, `backend/database.py` will **automatically fall back to local SQLite** (`portal.sqlite`), ensuring seamless development and testing with zero blockers.
+#### Match Categories:
+- **80% – 100%**: Excellent Match (`badge-excellent`)
+- **60% – 79%**: Good Match (`badge-good`)
+- **40% – 59%**: Partial Match (`badge-partial`)
+- **Below 40%**: Low Match (`badge-low`)
+
+*Exclusions: The project owner, existing team members, and students with pending invitations are automatically excluded from the candidate roster.*
+
+### 2. Idea Originality Checker Formula
+Uses Jaccard text similarity on unique normalized non-stopword word tokens between the proposed concept and each stored project:
+
+$$J(A, B) = \frac{|A \cap B|}{|A \cup B|}$$
+
+- **High Similarity ($\ge 70\%$)**: Similar project already exists. Displays matched project, category, creator, and year.
+- **Moderate Similarity ($40\% - 69\%$)**: Notable conceptual overlap found.
+- **Low Similarity ($< 40\%$)**: No similar project found in our database.
+
+> **Honest Scope Notice**: The system explicitly clarifies: *"This originality check compares only records stored within this application's project repository. It is not an internet-wide plagiarism detector and cannot prove global originality or plagiarism."*
 
 ---
 
-## ⚡ Quick Start & Running Instructions
+## 🗄️ Database Architecture
 
-### Prerequisites
-- Python 3.10+ (tested on Python 3.12)
-- Pip
+Stored skills are completely normalized into separate rows:
+- `users`: Core login credentials (`email`, `password_hash`, `role`, `status`, `created_at`).
+- `student_profiles`: Academic details (`department`, `semester`, `section`, `bio`, `interests`).
+- `student_skills`: Individual student skills as related records (`user_id`, `skill_name`).
+- `projects`: Student-created projects (`owner_id`, `title`, `domain`, `description`, `max_members`, `status`).
+- `project_required_skills`: Individual project requirements as related records (`project_id`, `skill_name`).
+- `team_members`: Membership and roles (`project_id`, `student_id`, `role`).
+- `invitations`: Teammate requests (`project_id`, `sender_id`, `recipient_id`, `message`, `status`).
+- `project_applications`: Student applications to join projects (`project_id`, `applicant_id`, `owner_id`, `message`, `status`).
+- `project_originality_checks`: Automated and manual similarity check records (`project_id`, `trigger_event`, `highest_similarity`, `closest_project_id`).
+- `notifications`: User notifications (`user_id`, `message`, `is_read`).
+- `tasks`: Team task progress (`project_id`, `title`, `description`, `assigned_to`, `status`, `created_by`).
 
-### 1. Install Dependencies
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Prerequisites
+- Python 3.10+ installed
+- Windows PowerShell or Command Prompt
+
+### 2. Installation
+Open a terminal in the project directory:
 ```bash
-pip install -r requirements.txt
+cd c:\Users\KITS\Desktop\pooja
+python -m pip install -r requirements.txt
 ```
 
-### 2. Seed Default Accounts
+### 3. Initialize Admin & Demo Data
+Create the initial Administrator account:
 ```bash
-# Seed official HOD account:
-python backend/seed.py
-
-# Seed full demo suite (HOD, faculty, students, teams, chats, notifications):
-python backend/demo_seed.py
+python seed_admin.py
 ```
+*Default Admin Credentials:* `admin@college.edu` / `AdminSecure@2026`
 
-### 3. Start the Portal
-#### Option A: One-Click Windows Batch File (Recommended)
-Double-click `START-PORTAL.bat` or run:
-```cmd
-START-PORTAL.bat
+Populate sample students, projects, and tasks for visual evaluation:
+```bash
+python seed_demo.py
 ```
-This automatically locates Python, checks database seeds, starts Flask on `http://localhost:5000`, and opens your default browser.
+*Pre-configured Demo Accounts:*
+- **Alex Chen** (CS / ML): `alex@student.edu` / `Student@2026`
+- **Maya Patel** (IT / Frontend): `maya@student.edu` / `Student@2026`
+- **Liam Davis** (Data Science / PyTorch): `liam@student.edu` / `Student@2026`
+- **Pooja Sharma** (CS / Full-Stack): `pooja@student.edu` / `Student@2026`
+- **John Pending** (Pending Admin Approval): `john.pending@student.edu` / `Student@2026`
 
-#### Option B: Terminal Command
+### 4. Run the Application
 ```bash
 python app.py
 ```
-Open your browser to: **`http://localhost:5000`**
-
----
-
-## 🔑 Default Demo Accounts
-
-Use the **"Demo Persona" dropdown** at the top right of the topbar to switch roles instantly with 1 click, or sign in using these pre-seeded credentials:
-
-| Persona | Email | Password | Role / Function |
-| :--- | :--- | :--- | :--- |
-| **HOD (Head of Dept)** | `hod.cs@college.edu` | `HodPass@2026` | Oversee faculty workloads, allocate students, approve/reject change requests, broadcast notices |
-| **Faculty Mentor** | `dr.jenkins@college.edu` | `password123` | View assigned students, form teams, mentor in team group chat, update research areas |
-| **Faculty Mentor 2** | `prof.sharma@college.edu` | `password123` | Machine Learning mentor |
-| **Student** | `alex.chen@student.edu` | `password123` | View assigned faculty, collaborate in team chat, create project portfolio, submit mentor change requests |
-| **Student 2** | `priya.patel@student.edu` | `password123` | Full-stack student collaborator |
-
----
-
-## 🧪 Automated Verification Suite
-
-Run the full end-to-end self-check verification test covering all 7 critical governance and security flows:
-```bash
-python tests/test_self_check.py
+Open your browser and navigate to:
+```
+http://127.0.0.1:5000
 ```
 
-### Verified Test Flows:
-1. **Flow 1: HOD Immutability** — Public signup with `role: hod` is strictly rejected (HTTP 400). Only official seeder can create HOD.
-2. **Flow 2: Faculty Email Domain Validation** — Faculty signup with `@gmail.com` is rejected (HTTP 400); `@college.edu` is accepted (HTTP 201).
-3. **Flow 3: HOD Workload Reassignment** — Single & bulk assignments persist and write immutable audit history records.
-4. **Flow 4: Change Request Lifecycle** — Student submits mentor change request, HOD approves, student is automatically reassigned.
-5. **Flow 5: Notification Audience Filtering** — Students see notices marked `students` or `both`, but never `faculty`-only notices.
-6. **Flow 6: Faculty Team Isolation** — Faculty can only add students assigned to them; attempting to add unassigned students returns HTTP 400.
-7. **Flow 7: Chat Group Authorization** — Non-member access to team chat messages is blocked with HTTP 403 Forbidden.
+---
+
+## 🧪 Automated Integration Testing
+
+Run the full end-to-end test suite covering all 11 modules:
+```bash
+python -m unittest tests/test_simple_reliable_app.py -v
+```
+All 10 integration tests execute with zero failures and zero errors:
+1. `test_01_registration_pending_and_admin_approval`: Verifies pending status on registration, login rejection prior to approval, admin approval workflow, and student login activation.
+2. `test_02_role_based_access`: Enforces strict student and admin route boundary guards.
+3. `test_03_profile_and_individual_skills`: Verifies individual skill row insertions and deletions in `student_skills`.
+4. `test_04_project_lifecycle`: Tests project creation, normalized required skills insertion, owner team assignment, and project editing.
+5. `test_05_explore_projects`: Verifies project browsing, domain filtering, keyword search, and absence of code downloads.
+6. `test_06_find_teammates_math_and_permissions`: Tests ownership restriction, candidate match percentage calculation $(Matched/Required) \times 100$, and candidate roster exclusion.
+7. `test_07_invitation_send_and_accept`: Tests invitation creation, duplicate invitation prevention, dashboard notification, and team acceptance.
+8. `test_08_workspace_and_tasks`: Verifies workspace member access, task creation, member assignment, status transition, and progress percentage.
+9. `test_09_originality_checker`: Verifies Jaccard token similarity calculation, high similarity detection against existing project, novel idea response, and platform disclaimer.
+10. `test_10_admin_dashboard`: Verifies platform metrics, pending request approvals, and approved student directory.
+11. `test_11_student_applications`: Tests student applications to open projects, duplicate prevention, and owner review/decision workflow.
+12. `test_12_automatic_team_formation_originality_check`: Verifies automatic Jaccard originality check trigger when project team reaches capacity.
+13. `test_13_invitation_module_pages_and_filters`: Tests Sent and Received invitation pages with Pending, Accepted, and Rejected filters.
+14. `test_14_explore_recommendations_creator_profile_and_apply`: Tests skill-based recommendation sorting, public creator profile viewing, and project application.
+15. `test_15_registration_status_workflow_and_notifications`: Tests student registration status tracking (`/check-status`), login blocking for pending/rejected accounts, and admin status governance.
+
+---
+
+## 🎨 Color Palette & UI Guidelines
+
+| Token | Hex Code | Purpose |
+| :--- | :--- | :--- |
+| Primary Dark | `#29265B` | Brand identity, headers, main actions |
+| Accent Purple | `#49459A` | Gradients, secondary buttons, active highlights |
+| Background | `#F7F8FC` | Soft off-white clean application canvas |
+| Surface / Cards | `#FFFFFF` | Form containers, candidate and project cards |
+| Text Main | `#202238` | Headings and high-contrast body typography |
+| Text Secondary| `#70748A` | Subtitles, meta tags, and descriptions |
+| Border | `#E5E7EF` | Clean structural dividers |
+| Success | `#27845B` | Excellent match badges, approved alerts |
+| Warning | `#B7791F` | Pending approvals, partial matches |
+| Error | `#C24141` | High originality alerts, rejection actions |

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Check Registration Status - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 580px; margin: 30px auto 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Lookup Form Card -->
+  <div class="card">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h1>Check Registration Status</h1>
+      <p class="subtitle">Enter your registered student email address to check your account approval status</p>
+    </div>
+
+    <form method="GET" action="{{ url_for('check_registration_status') }}">
+      <div class="form-group">
+        <label class="form-label" for="email">Student Email Address *</label>
+        <input type="email" id="email" name="email" class="form-input" required placeholder="e.g. sarah@student.edu" value="{{ email_query }}">
+        <div class="form-help">Enter the email you provided when submitting your student registration request.</div>
+      </div>
+
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button type="submit" class="btn btn-primary" style="flex: 1; padding: 11px;">
+          Check Status
+        </button>
+        {% if email_query %}
+          <a href="{{ url_for('check_registration_status') }}" class="btn btn-outline" style="padding: 11px 18px;">
+            Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Status Result Display -->
+  {% if searched and status_info %}
+    <div class="card" style="border-top: 4px solid {% if status_info.status == 'approved' %}var(--color-success){% elif status_info.status == 'pending' %}var(--color-warning){% else %}var(--color-error){% endif %}; padding: 28px;">
+      
+      <!-- Status Icon & Title -->
+      <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px;">
+        {% if status_info.status == 'pending' %}
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: #fef3c7; color: #b45309; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; flex-shrink: 0; border: 2px solid #fde68a;">
+            &#x23F0;
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 style="margin: 0; font-size: 20px;">Pending</h2>
+              <span class="badge badge-warning">Awaiting Approval</span>
+            </div>
+            <p style="font-size: 15px; font-weight: 700; color: #92400e; margin: 6px 0 0 0;">
+              &ldquo;Your registration is awaiting Admin approval.&rdquo;
+            </p>
+          </div>
+        {% elif status_info.status == 'approved' %}
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: #d1fae5; color: #047857; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; flex-shrink: 0; border: 2px solid #a7f3d0;">
+            &check;
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 style="margin: 0; font-size: 20px;">Approved</h2>
+              <span class="badge badge-success">Account Active</span>
+            </div>
+            <p style="font-size: 15px; font-weight: 700; color: #065f46; margin: 6px 0 0 0;">
+              &ldquo;Your account has been approved. You can now log in.&rdquo;
+            </p>
+          </div>
+        {% else %}
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: #fee2e2; color: #b91c1c; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; flex-shrink: 0; border: 2px solid #fecaca;">
+            &times;
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 style="margin: 0; font-size: 20px;">Rejected</h2>
+              <span class="badge badge-danger">Registration Declined</span>
+            </div>
+            <p style="font-size: 15px; font-weight: 700; color: #991b1b; margin: 6px 0 0 0;">
+              &ldquo;Your registration request was rejected. Please contact the project administrator.&rdquo;
+            </p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Detail Box -->
+      <div style="padding: 14px 16px; background: var(--color-bg); border-radius: var(--radius-md); font-size: 13px; line-height: 1.5; color: var(--color-text-main); margin-bottom: 20px;">
+        {% if status_info.status == 'pending' %}
+          Your account is awaiting Admin approval. You will be able to log in after your account is approved.
+        {% elif status_info.status == 'approved' %}
+          Your registration request was approved by the Administrator. You can now log in with your registered credentials.
+        {% else %}
+          Your registration request was rejected by the Admin. Please contact the college project administrator for further information.
+        {% endif %}
+      </div>
+
+      <!-- Account Summary Info -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; padding: 12px 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); margin-bottom: 20px;">
+        <div>
+          <span style="color: var(--color-text-secondary); display: block;">Student Name:</span>
+          <strong>{{ status_info.name }}</strong>
+        </div>
+        <div>
+          <span style="color: var(--color-text-secondary); display: block;">Department:</span>
+          <strong>{{ status_info.department }}</strong>
+        </div>
+        <div>
+          <span style="color: var(--color-text-secondary); display: block;">Submitted Date:</span>
+          <span>{{ status_info.submitted_at }}</span>
+        </div>
+        <div>
+          <span style="color: var(--color-text-secondary); display: block;">Current Status:</span>
+          <strong style="text-transform: capitalize;">{{ status_info.status }}</strong>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        {% if status_info.status == 'approved' %}
+          <a href="{{ url_for('login') }}" class="btn btn-primary" style="padding: 10px 22px;">
+            Sign In Now &rarr;
+          </a>
+        {% elif status_info.status == 'pending' %}
+          <a href="{{ url_for('check_registration_status', email=status_info.email) }}" class="btn btn-outline btn-sm">
+            Check Again
+          </a>
+          <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">
+            Go to Sign In
+          </a>
+        {% else %}
+          <a href="{{ url_for('login') }}" class="btn btn-outline btn-sm">
+            Return to Sign In
+          </a>
+          <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm">
+            Submit New Request
+          </a>
+        {% endif %}
+      </div>
+
+    </div>
+  {% endif %}
+
+  <!-- Information Reference Card: "How the student will know" -->
+  <div class="card" style="padding: 22px;">
+    <div style="font-size: 13px; font-weight: 700; color: var(--color-text-main); margin-bottom: 14px;">
+      How the student will know
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      
+      <!-- Pending item -->
+      <div style="display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #d97706;">
+        <span style="color: #d97706; font-size: 16px; line-height: 1.2;">&#x23F0;</span>
+        <div>
+          <div style="font-weight: 700; font-size: 13px; color: var(--color-text-main);">Pending</div>
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+            &ldquo;Your registration is awaiting Admin approval.&rdquo;
+          </div>
+        </div>
+      </div>
+
+      <!-- Approved item -->
+      <div style="display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #059669;">
+        <span style="color: #059669; font-size: 16px; line-height: 1.2;">&check;</span>
+        <div>
+          <div style="font-weight: 700; font-size: 13px; color: var(--color-text-main);">Approved</div>
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+            &ldquo;Your account has been approved. You can now log in.&rdquo;
+          </div>
+        </div>
+      </div>
+
+      <!-- Rejected item -->
+      <div style="display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #dc2626;">
+        <span style="color: #dc2626; font-size: 16px; line-height: 1.2;">&times;</span>
+        <div>
+          <div style="font-weight: 700; font-size: 13px; color: var(--color-text-main);">Rejected</div>
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+            &ldquo;Your registration request was rejected. Please contact the project administrator.&rdquo;
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

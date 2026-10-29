@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.name }} - Student Profile{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Back Navigation -->
+  <div>
+    {% if from_project %}
+      <a href="{{ url_for('view_project_details', project_id=from_project.id) }}" style="color: var(--color-primary); text-decoration: none; font-size: 13px; font-weight: 600;">
+        &larr; Back to Project: <strong>{{ from_project.title }}</strong>
+      </a>
+    {% else %}
+      <a href="{{ url_for('explore_projects') }}" style="color: var(--color-primary); text-decoration: none; font-size: 13px; font-weight: 600;">
+        &larr; Back to Explore Projects
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Profile Hero Header Card -->
+  <div class="card" style="padding: 30px;">
+    <div style="display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap;">
+      <!-- Initials Avatar -->
+      <div style="width: 76px; height: 76px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);">
+        {{ profile.name[0] if profile.name else 'S' }}
+      </div>
+
+      <div style="flex: 1; min-width: 260px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+          <h1 style="margin: 0; font-size: 26px;">{{ profile.name }}</h1>
+          <span class="badge badge-primary">Approved Student</span>
+        </div>
+
+        <p style="color: var(--color-text-secondary); margin: 0 0 14px 0; font-size: 14px;">
+          <strong>{{ profile.department }}</strong> &bull; Semester {{ profile.semester }} {% if profile.section %}&bull; Section {{ profile.section }}{% endif %}
+        </p>
+
+        {% if profile.bio %}
+          <div style="font-size: 14px; line-height: 1.6; color: var(--color-text-main); padding: 12px 16px; background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-secondary);">
+            {{ profile.bio }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Technical Skills & Programming Languages -->
+  <div class="card" style="padding: 24px;">
+    <div class="section-title">
+      <span>Technical Skills & Programming Languages ({{ skills|length }})</span>
+    </div>
+
+    {% if skills %}
+      <div class="skills-container">
+        {% for sk in skills %}
+          <span class="skill-pill" style="font-size: 13px; padding: 6px 14px;">
+            {{ sk }}
+          </span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding: 20px;">
+        <p>No technical skills listed on profile yet.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Interests & Areas of Expertise -->
+  {% if profile.interests %}
+    <div class="card" style="padding: 24px;">
+      <div class="section-title">
+        <span>Interests & Areas of Expertise</span>
+      </div>
+      <p style="font-size: 14px; line-height: 1.6; color: var(--color-text-main); margin: 0;">
+        {{ profile.interests }}
+      </p>
+    </div>
+  {% endif %}
+
+  <!-- Projects Led / Academic Portfolio -->
+  <div class="card" style="padding: 24px;">
+    <div class="section-title">
+      <span>Projects Created by {{ profile.name }} ({{ projects_led|length }})</span>
+    </div>
+
+    {% if projects_led %}
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for p in projects_led %}
+          <div style="padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+              <div>
+                <span class="badge badge-primary">{{ p.domain }}</span>
+                <span class="badge {% if p.status == 'open' %}badge-success{% else %}badge-gray{% endif %}" style="margin-left: 4px;">
+                  {{ p.status|capitalize }}
+                </span>
+                <h3 style="margin: 6px 0 4px 0; font-size: 16px;">{{ p.title }}</h3>
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-secondary);">
+                Team: <strong>{{ p.member_count }}</strong> / {{ p.max_members }} members
+              </div>
+            </div>
+
+            <p style="color: var(--color-text-secondary); font-size: 13px; line-height: 1.4; margin: 0 0 10px 0;">
+              {{ p.description }}
+            </p>
+
+            {% if p.required_skills %}
+              <div style="margin-bottom: 12px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase;">
+                  Skills:
+                </span>
+                <div class="skills-container" style="display: inline-flex; margin-left: 6px;">
+                  {% for sk in p.required_skills %}
+                    <span class="skill-pill">{{ sk }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            <div style="display: flex; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--color-border);">
+              <a href="{{ url_for('view_project_details', project_id=p.id) }}" class="btn btn-outline btn-sm">
+                View Project Details &rarr;
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding: 20px;">
+        <p>This student is not currently leading any public projects.</p>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

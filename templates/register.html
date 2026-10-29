@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Request Student Account - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 540px; margin: 30px auto 0 auto;">
+  <div class="card">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h1>Request Student Account</h1>
+      <p class="subtitle">Submit your registration details for Administrator approval</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('register') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="name">Full Name *</label>
+        <input type="text" id="name" name="name" class="form-input" required placeholder="e.g. Alex Chen">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Student Email Address *</label>
+        <input type="email" id="email" name="email" class="form-input" required placeholder="alex.chen@student.edu">
+        <div class="form-help">Must be a valid student email address.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Create Password *</label>
+        <input type="password" id="password" name="password" class="form-input" required placeholder="Minimum 6 characters">
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="department">Department / Branch *</label>
+          <input type="text" id="department" name="department" class="form-input" required placeholder="e.g. Computer Science">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="semester">Current Semester *</label>
+          <select id="semester" name="semester" class="form-select" required>
+            <option value="1">Semester 1</option>
+            <option value="2">Semester 2</option>
+            <option value="3">Semester 3</option>
+            <option value="4">Semester 4</option>
+            <option value="5">Semester 5</option>
+            <option value="6" selected>Semester 6</option>
+            <option value="7">Semester 7</option>
+            <option value="8">Semester 8</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="section">Section</label>
+        <input type="text" id="section" name="section" class="form-input" placeholder="e.g. Section A">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bio">Profile Summary / Bio</label>
+        <textarea id="bio" name="bio" rows="2" class="form-textarea" placeholder="Brief technical summary..."></textarea>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
+          Submit Account Request
+        </button>
+      </div>
+    </form>
+
+    <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); text-align: center; font-size: 13px;">
+      <span style="color: var(--color-text-secondary);">Already registered?</span>
+      <a href="{{ url_for('login') }}" style="color: var(--color-primary); font-weight: 700; text-decoration: underline; margin-left: 4px;">
+        Sign In here
+      </a>
+      <span style="margin: 0 8px; color: var(--color-border);">&bull;</span>
+      <a href="{{ url_for('check_registration_status') }}" style="color: var(--color-text-secondary); text-decoration: underline;">
+        Check Status
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

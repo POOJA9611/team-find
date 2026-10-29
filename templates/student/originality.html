@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Idea Originality Checker - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Header Banner -->
+  <div class="card" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%); color: #fff; padding: 26px 30px; border-radius: var(--radius-lg);">
+    <h1 style="color: #fff; margin: 0 0 6px 0;">Check Your Project Idea</h1>
+    <p style="color: rgba(255, 255, 255, 0.85); margin: 0; font-size: 13px;">
+      Evaluate conceptual similarity against stored projects in our database before starting your build.
+    </p>
+  </div>
+
+  <!-- Idea Input Form Card -->
+  <div class="card">
+    <div style="margin-bottom: 18px;">
+      <h2>Submit Project Concept</h2>
+      <p class="subtitle" style="margin-bottom: 0;">
+        Enter your proposed project title and description to run a Jaccard token similarity analysis.
+      </p>
+    </div>
+
+    <form method="POST" action="{{ url_for('originality_checker') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="title">Proposed Project Title *</label>
+        <input type="text" id="title" name="title" class="form-input" required placeholder="e.g. AI-Based Resume Analyzer and Job Matcher" value="{{ title or '' }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="description">Concept / Problem & Solution Overview *</label>
+        <textarea id="description" name="description" rows="4" class="form-textarea" required placeholder="Describe what problem your system solves, how it functions, and the target audience...">{{ description or '' }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="fillExampleIdea()">
+          Load Example Idea
+        </button>
+        <button type="submit" class="btn btn-primary">
+          Analyze Idea Originality
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Analysis Results Section -->
+  {% if checked %}
+    <div class="card" style="border-left: 6px solid {% if highest_score >= 70 %}var(--color-error){% elif highest_score >= 40 %}var(--color-warning){% else %}var(--color-success){% endif %};">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span class="badge {% if highest_score >= 70 %}badge-danger{% elif highest_score >= 40 %}badge-warning{% else %}badge-success{% endif %}" style="font-size: 13px; padding: 4px 10px;">
+              {{ similarity_level }} ({{ highest_score }}% Match)
+            </span>
+          </div>
+          <h2>
+            {% if highest_score >= 40 %}
+              Similar project(s) found in our database
+            {% else %}
+              No similar project found in our database
+            {% endif %}
+          </h2>
+        </div>
+
+        {% if highest_score < 40 %}
+          <a href="{{ url_for('create_project', title=title, description=description) }}" class="btn btn-success">
+            + Create Project with This Idea
+          </a>
+        {% endif %}
+      </div>
+
+      <!-- Mandatory Honest Platform Scope Disclaimer -->
+      <div style="background-color: var(--color-bg); padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: 20px;">
+        <div style="font-weight: 700; font-size: 12px; color: var(--color-text-main); margin-bottom: 4px;">
+          Platform Scope & Disclaimer
+        </div>
+        <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0; line-height: 1.4;">
+          This originality check compares only records stored within this application's project repository. It is not an internet-wide plagiarism detector and cannot prove global originality or plagiarism.
+        </p>
+      </div>
+
+      <!-- Matched Database Projects List -->
+      {% if matches %}
+        <div style="font-size: 12px; font-weight: 700; color: var(--color-text-main); text-transform: uppercase; margin-bottom: 10px;">
+          Compared Database Projects ({{ matches|length }})
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          {% for m in matches %}
+            <div style="padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: #fff;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 14px;">{{ m.title }}</strong>
+                <span class="badge {% if m.score >= 70 %}badge-danger{% elif m.score >= 40 %}badge-warning{% else %}badge-gray{% endif %}">
+                  {{ m.score }}% Similarity ({{ m.level }})
+                </span>
+              </div>
+              <p style="font-size: 12.5px; color: var(--color-text-secondary); margin: 0 0 8px 0; line-height: 1.4;">
+                {{ m.description }}
+              </p>
+              <div style="font-size: 11px; color: var(--color-text-secondary);">
+                Category: <strong>{{ m.domain }}</strong> &bull; Owner: <strong>{{ m.owner_name }}</strong> &bull; Status: {{ m.status }}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="font-size: 13px; color: var(--color-text-secondary);">
+          No existing projects were found in the database for comparison.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+  function fillExampleIdea() {
+    document.getElementById('title').value = 'AI-Based Resume Analyzer and Job Matcher';
+    document.getElementById('description').value = 'An intelligent web platform that parses student resumes, extracts technical programming skills, and matches student profiles with relevant entry-level software job roles using natural language processing.';
+  }
+</script>
+{% endblock %}

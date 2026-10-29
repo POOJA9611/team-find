@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Sent Invitations - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Header Banner -->
+  <div class="card" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%); color: #fff; padding: 26px 30px; border-radius: var(--radius-lg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <h1 style="color: #fff; margin: 0 0 6px 0;">Team Invitations</h1>
+        <p style="color: rgba(255, 255, 255, 0.85); margin: 0; font-size: 13px;">
+          Track and manage invitations you have sent to fellow students for projects you lead.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('explore_projects') }}" class="btn" style="background-color: #fff; color: var(--color-primary); font-weight: 700;">
+          Explore Projects
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sub-Navigation Navigation (Received vs. Sent Tabs) -->
+  <div style="display: flex; gap: 10px; border-bottom: 2px solid var(--color-border); padding-bottom: 12px;">
+    <a href="{{ url_for('received_invitations') }}" class="btn btn-outline btn-sm" style="font-weight: 600;">
+      &larr; Received Invitations
+    </a>
+    <a href="{{ url_for('sent_invitations') }}" class="btn btn-primary btn-sm" style="font-weight: 600;">
+      Sent Invitations ({{ counts.all }})
+    </a>
+  </div>
+
+  <!-- Status Filters (Pending, Accepted, Rejected, All) -->
+  <div class="card" style="padding: 16px 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--color-text-main);">
+        Filter Sent Invitations by Status:
+      </div>
+      <div class="filter-tabs">
+        <a href="{{ url_for('sent_invitations') }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">
+          All <span class="tab-count">{{ counts.all }}</span>
+        </a>
+        <a href="{{ url_for('sent_invitations', status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">
+          Pending <span class="tab-count">{{ counts.pending }}</span>
+        </a>
+        <a href="{{ url_for('sent_invitations', status='accepted') }}" class="filter-tab {% if status_filter == 'accepted' %}active{% endif %}">
+          Accepted <span class="tab-count">{{ counts.accepted }}</span>
+        </a>
+        <a href="{{ url_for('sent_invitations', status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">
+          Rejected <span class="tab-count">{{ counts.rejected }}</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invitations Roster -->
+  {% if invitations %}
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      {% for inv in invitations %}
+        <div class="card" style="padding: 22px;">
+          <!-- Card Header -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h3 style="margin: 0; font-size: 17px;">Invited: {{ inv.recipient_name }}</h3>
+                <span class="badge {% if inv.status == 'pending' %}badge-warning{% elif inv.status == 'accepted' %}badge-success{% else %}badge-danger{% endif %}">
+                  {{ inv.status|capitalize }}
+                </span>
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 3px;">
+                Recipient: <strong>{{ inv.recipient_department }}</strong> &bull; Semester {{ inv.recipient_semester }} {% if inv.recipient_section %}&bull; Section {{ inv.recipient_section }}{% endif %}
+              </div>
+            </div>
+
+            <div style="font-size: 12px; color: var(--color-text-secondary); text-align: right;">
+              <div>Invited on: <strong>{{ inv.created_at }}</strong></div>
+              {% if inv.decided_at %}
+                <div style="font-size: 11px; margin-top: 2px;">Responded: {{ inv.decided_at }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Project Association Bar -->
+          <div style="padding: 10px 14px; background: var(--color-bg); border-radius: var(--radius-md); margin-bottom: 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div>
+              Project: <strong>{{ inv.project_title }}</strong> <span class="badge badge-primary" style="margin-left: 6px; font-size: 11px;">{{ inv.project_domain }}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-secondary);">
+              Team Size: <strong>{{ inv.current_member_count }}</strong> / {{ inv.max_members }} Members
+            </div>
+          </div>
+
+          <!-- Recipient Technical Skills -->
+          {% if inv.recipient_skills %}
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+                Recipient Technical Skills:
+              </div>
+              <div class="skills-container">
+                {% for sk in inv.recipient_skills %}
+                  <span class="skill-pill">{{ sk }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Recipient Bio if provided -->
+          {% if inv.recipient_bio %}
+            <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.4; margin-bottom: 12px;">
+              <em>"{{ inv.recipient_bio }}"</em>
+            </div>
+          {% endif %}
+
+          <!-- Sent Message -->
+          {% if inv.message %}
+            <div style="padding: 10px 14px; background: #fff; border-left: 3px solid var(--color-primary); border-radius: var(--radius-sm); font-size: 13px; color: var(--color-text-main); margin-bottom: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px;">Your Invitation Note:</div>
+              "{{ inv.message }}"
+            </div>
+          {% endif %}
+
+          <!-- Card Footer Actions -->
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--color-border); flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 12px; color: var(--color-text-secondary);">
+              {% if inv.status == 'pending' %}
+                Awaiting student response.
+              {% elif inv.status == 'accepted' %}
+                <span style="color: var(--color-success); font-weight: 600;">&check; Student accepted and is a confirmed team member.</span>
+              {% else %}
+                <span style="color: var(--color-error);">Student declined this invitation.</span>
+              {% endif %}
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <a href="{{ url_for('find_teammates', project_id=inv.project_id) }}" class="btn btn-outline btn-sm">
+                Find More Teammates
+              </a>
+              {% if inv.status == 'accepted' %}
+                <a href="{{ url_for('project_workspace', project_id=inv.project_id) }}" class="btn btn-primary btn-sm">
+                  Open Project Workspace
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <h3>No {{ status_filter if status_filter != 'all' else '' }} sent invitations found</h3>
+      <p>
+        {% if status_filter == 'pending' %}
+          You have no pending invitations awaiting responses from students.
+        {% elif status_filter == 'accepted' %}
+          None of your sent invitations have been accepted yet.
+        {% elif status_filter == 'rejected' %}
+          None of your sent invitations have been declined.
+        {% else %}
+          You have not sent any project invitations yet.
+        {% endif %}
+      </p>
+      <div style="margin-top: 14px; display: flex; justify-content: center; gap: 10px;">
+        <a href="{{ url_for('student_dashboard') }}" class="btn btn-outline btn-sm">Back to Dashboard</a>
+        <a href="{{ url_for('sent_invitations') }}" class="btn btn-primary btn-sm">View All Sent</a>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

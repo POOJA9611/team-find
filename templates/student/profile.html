@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}My Student Profile - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Profile Edit Card -->
+  <div class="card">
+    <div style="margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+      <h1>Student Profile & Information</h1>
+      <p class="subtitle">Keep your academic details and interests updated for potential teammates</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('student_profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="name">Full Name *</label>
+          <input type="text" id="name" name="name" class="form-input" required value="{{ profile.name }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input type="email" id="email" class="form-input" disabled value="{{ user.email }}" style="background-color: #F1F3F7; cursor: not-allowed;">
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="form-group">
+          <label class="form-label" for="department">Department / Branch *</label>
+          <input type="text" id="department" name="department" class="form-input" required value="{{ profile.department }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="semester">Current Semester *</label>
+          <select id="semester" name="semester" class="form-select" required>
+            {% for s in range(1, 9) %}
+              <option value="{{ s }}" {% if profile.semester == s %}selected{% endif %}>Semester {{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="section">Section</label>
+          <input type="text" id="section" name="section" class="form-input" value="{{ profile.section or '' }}" placeholder="e.g. Section A">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="interests">Areas of Interest</label>
+        <input type="text" id="interests" name="interests" class="form-input" value="{{ profile.interests or '' }}" placeholder="e.g. Distributed Systems, Computer Vision, Cloud DevOps">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bio">Profile Description & Technical Summary</label>
+        <textarea id="bio" name="bio" rows="3" class="form-textarea" placeholder="Describe your background, passions, and experience...">{{ profile.bio or '' }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary">Save Profile Details</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Technical Skills Module (Normalized database records) -->
+  <div class="card">
+    <div style="margin-bottom: 16px;">
+      <h2>Technical Skills</h2>
+      <p class="subtitle" style="margin-bottom: 0;">
+        Individual skill records stored in the database. Used by the matching algorithm to calculate project compatibility.
+      </p>
+    </div>
+
+    <!-- Active Skills List -->
+    <div style="margin-bottom: 20px; padding: 16px; background-color: var(--color-bg); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
+      <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 10px;">
+        Saved Skills ({{ skills|length }})
+      </div>
+
+      {% if skills %}
+        <div class="skills-container">
+          {% for sk in skills %}
+            <span class="skill-pill">
+              <span>{{ sk.skill_name }}</span>
+              <form method="POST" action="{{ url_for('delete_student_skill', skill_id=sk.id) }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="skill-pill-remove" title="Remove {{ sk.skill_name }}">&times;</button>
+              </form>
+            </span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div style="color: var(--color-text-secondary); font-size: 13px;">
+          No skills added yet. Add your programming languages, frameworks, and technologies below.
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Add Skill Form -->
+    <form method="POST" action="{{ url_for('add_student_skill') }}" style="display: flex; gap: 10px; align-items: flex-end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div style="flex: 1;">
+        <label class="form-label" for="skill_name">Add New Skill or Technology</label>
+        <input type="text" id="skill_name" name="skill_name" class="form-input" required placeholder="e.g. Python, React, Docker, JavaScript, SQL">
+        <div class="form-help">Genuine aliases (e.g. JS &rarr; JavaScript, Py &rarr; Python) are automatically normalized.</div>
+      </div>
+
+      <button type="submit" class="btn btn-secondary" style="padding: 10px 18px;">
+        + Add Skill
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

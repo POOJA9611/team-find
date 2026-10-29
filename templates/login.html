@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 440px; margin: 40px auto 0 auto;">
+  <div class="card">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h1>Sign In to Portal</h1>
+      <p class="subtitle">Access your projects, teammates, and originality checks</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="email">Email Address</label>
+        <input type="email" id="email" name="email" class="form-input" required placeholder="name@college.edu or name@student.edu">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" name="password" class="form-input" required placeholder="••••••••">
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">Sign In</button>
+      </div>
+    </form>
+
+    <div style="margin-top: 14px; text-align: center;">
+      <a href="{{ url_for('check_registration_status', email=pending_email or '') }}" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-primary); font-weight: 600; text-decoration: none;">
+        <span>&#x1F50D;</span>
+        <span>Check Registration Status</span>
+      </a>
+    </div>
+
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-border); text-align: center; font-size: 13px;">
+      <span style="color: var(--color-text-secondary);">New student?</span>
+      <a href="{{ url_for('register') }}" style="color: var(--color-primary); font-weight: 700; text-decoration: underline; margin-left: 4px;">
+        Request an Account
+      </a>
+    </div>
+
+    <!-- Quick Demo Logins Helper for instant testing -->
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--color-border);">
+      <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 8px; text-align: center;">
+        Quick 1-Click Demo Credentials
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-outline btn-sm" style="flex: 1;" onclick="fillLogin('admin@college.edu', 'AdminSecure@2026')">
+          Admin Demo
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" style="flex: 1;" onclick="fillLogin('alex.chen@student.edu', 'Password@123')">
+          Student Demo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function fillLogin(em, pw) {
+    document.getElementById('email').value = em;
+    document.getElementById('password').value = pw;
+  }
+</script>
+{% endblock %}

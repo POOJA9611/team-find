@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Create Academic Project - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="max-width: 720px; margin: 20px auto 0 auto;">
+  <div class="card">
+    <div style="margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+      <h1>Create Academic Project</h1>
+      <p class="subtitle">Set up your capstone or research project and specify target teammate skills</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('create_project') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="title">Project Title *</label>
+        <input type="text" id="title" name="title" class="form-input" required placeholder="e.g. Autonomous Campus Navigation System" value="{{ prefill_title or '' }}">
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="domain">Domain / Category *</label>
+          <select id="domain" name="domain" class="form-select" required>
+            <option value="Artificial Intelligence">Artificial Intelligence</option>
+            <option value="Machine Learning">Machine Learning</option>
+            <option value="Web Development" selected>Web Development</option>
+            <option value="Mobile Development">Mobile Development</option>
+            <option value="Cybersecurity">Cybersecurity</option>
+            <option value="Cloud Computing">Cloud Computing</option>
+            <option value="IoT">IoT / Embedded</option>
+            <option value="Data Science">Data Science</option>
+            <option value="Blockchain">Blockchain</option>
+            <option value="Healthcare">Healthcare</option>
+            <option value="Education">Education</option>
+            <option value="Finance">Finance</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="max_members">Maximum Team Size *</label>
+          <select id="max_members" name="max_members" class="form-select" required>
+            <option value="2">2 Members</option>
+            <option value="3">3 Members</option>
+            <option value="4" selected>4 Members (Standard)</option>
+            <option value="5">5 Members</option>
+            <option value="6">6 Members</option>
+          </select>
+          <div class="form-help">You (the creator) count as 1 member.</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="required_skills">Required Teammate Skills (Comma-separated) *</label>
+        <input type="text" id="required_skills" name="required_skills" class="form-input" required placeholder="e.g. Python, React, PostgreSQL, Docker" value="{{ prefill_skills or '' }}">
+        <div class="form-help">Individual skills will be normalized and stored as distinct records for candidate matching.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="description">Project Description *</label>
+        <textarea id="description" name="description" rows="4" class="form-textarea" required placeholder="Describe what the system does, its goals, and key deliverables...">{{ prefill_description or '' }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
+        <a href="{{ url_for('student_dashboard') }}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create Project</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

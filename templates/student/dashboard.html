@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Hero Header -->
+  <div class="card" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%); color: #fff; padding: 28px 32px; border-radius: var(--radius-lg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <h1 style="color: #fff; margin: 0 0 6px 0;">Welcome, {{ profile.name }}!</h1>
+        <p style="color: rgba(255, 255, 255, 0.85); margin: 0; font-size: 13px;">
+          {{ profile.department }} &bull; Semester {{ profile.semester }} {% if profile.section %}&bull; {{ profile.section }}{% endif %}
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="{{ url_for('create_project') }}" class="btn" style="background-color: #fff; color: var(--color-primary); font-weight: 700;">
+          + Create New Project
+        </a>
+        <a href="{{ url_for('explore_projects') }}" class="btn" style="background-color: rgba(255, 255, 255, 0.15); color: #fff; border: 1px solid rgba(255, 255, 255, 0.3);">
+          Explore Open Projects
+        </a>
+        <a href="{{ url_for('originality_checker') }}" class="btn" style="background-color: rgba(255, 255, 255, 0.15); color: #fff; border: 1px solid rgba(255, 255, 255, 0.3);">
+          Check Project Idea
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 1: Projects I Lead -->
+  <div>
+    <div class="section-title">
+      <span>Projects I Lead ({{ projects_lead|length }})</span>
+      <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('sent_invitations') }}" class="btn btn-outline btn-sm">Sent Invitations</a>
+        <a href="{{ url_for('create_project') }}" class="btn btn-outline btn-sm">+ New Project</a>
+      </div>
+    </div>
+
+    {% if projects_lead %}
+      <div class="grid-2">
+        {% for proj in projects_lead %}
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+              <div>
+                <span class="badge badge-primary">{{ proj.domain }}</span>
+                <span class="badge {% if proj.status == 'open' %}badge-success{% else %}badge-gray{% endif %}" style="margin-left: 6px;">
+                  {{ proj.status }}
+                </span>
+              </div>
+              <span style="font-size: 12px; color: var(--color-text-secondary);">
+                Team: <strong>{{ proj.member_count }}</strong> / {{ proj.max_members }}
+              </span>
+            </div>
+
+            <h3 style="margin-bottom: 8px;">{{ proj.title }}</h3>
+            <p style="color: var(--color-text-secondary); font-size: 13px; margin-bottom: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+              {{ proj.description }}
+            </p>
+
+            <!-- Required Skills List -->
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+                Required Skills ({{ proj.required_skills|length }})
+              </div>
+              <div class="skills-container">
+                {% for sk in proj.required_skills %}
+                  <span class="skill-pill">{{ sk }}</span>
+                {% else %}
+                  <span style="font-size: 12px; color: var(--color-warning);">No required skills configured yet.</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Actions Bar -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--color-border); justify-content: space-between; align-items: center;">
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a href="{{ url_for('find_teammates', project_id=proj.id) }}" class="btn btn-primary btn-sm">
+                  Find Teammates
+                </a>
+                <a href="{{ url_for('project_workspace', project_id=proj.id) }}" class="btn btn-outline btn-sm">
+                  Workspace
+                </a>
+                <a href="{{ url_for('edit_project', project_id=proj.id) }}" class="btn btn-outline btn-sm">
+                  Edit
+                </a>
+              </div>
+              <form method="POST" action="{{ url_for('recheck_project_originality', project_id=proj.id) }}" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline btn-sm" title="Re-run similarity comparison against database">
+                  Originality Check
+                </button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card empty-state">
+        <h4>You are not leading any projects yet</h4>
+        <p>Start your own academic project and recruit skilled teammates!</p>
+        <div style="margin-top: 14px;">
+          <a href="{{ url_for('create_project') }}" class="btn btn-primary btn-sm">Create a Project</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- SECTION 2: Project Applications Received (Review Applications) -->
+  <div class="card">
+    <div class="section-title">
+      <span>Project Applications Received ({{ applications_received|length }})</span>
+      <span style="font-size: 12px; color: var(--color-text-secondary); font-weight: normal;">
+        Review student requests to join projects you lead
+      </span>
+    </div>
+
+    {% if applications_received %}
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for app_item in applications_received %}
+          <div style="padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-bg);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <a href="{{ url_for('view_student_profile', user_id=app_item.applicant_id, from_project=app_item.project_id) }}" style="color: var(--color-primary); text-decoration: none; font-size: 15px; font-weight: 700;">
+                    {{ app_item.applicant_name }}
+                  </a>
+                  <span class="badge {% if app_item.match_percentage >= 80 %}badge-excellent{% elif app_item.match_percentage >= 60 %}badge-good{% elif app_item.match_percentage >= 40 %}badge-partial{% else %}badge-low{% endif %}">
+                    {{ app_item.match_percentage }}% Match &bull; {{ app_item.match_rating }}
+                  </span>
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+                  Applying for: <strong>{{ app_item.project_title }}</strong> &bull; {{ app_item.applicant_department }} (Semester {{ app_item.applicant_semester }}{% if app_item.applicant_section %}, Section {{ app_item.applicant_section }}{% endif %})
+                </div>
+              </div>
+
+              <div>
+                <span class="badge {% if app_item.status == 'pending' %}badge-warning{% elif app_item.status == 'accepted' %}badge-success{% else %}badge-danger{% endif %}">
+                  {{ app_item.status|capitalize }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Application Message -->
+            {% if app_item.message %}
+              <div style="padding: 8px 12px; background: #fff; border-left: 3px solid var(--color-primary); border-radius: var(--radius-sm); font-size: 13px; margin: 8px 0; color: var(--color-text-main);">
+                "{{ app_item.message }}"
+              </div>
+            {% endif %}
+
+            <!-- Applicant Skills -->
+            <div style="margin-top: 8px;">
+              <span style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase;">
+                Applicant Skills:
+              </span>
+              <div class="skills-container" style="display: inline-flex; margin-left: 6px;">
+                {% for sk in app_item.applicant_skills %}
+                  <span class="skill-pill">{{ sk }}</span>
+                {% else %}
+                  <span style="font-size: 11px; color: var(--color-text-secondary);">No skills listed</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Decision Controls (Owner Only) -->
+            {% if app_item.status == 'pending' %}
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border); flex-wrap: wrap; gap: 8px;">
+                <span style="font-size: 12px; color: var(--color-text-secondary);">
+                  Team Capacity: {{ app_item.current_member_count }} / {{ app_item.max_members }} members
+                </span>
+
+                <div style="display: flex; gap: 8px;">
+                  <form method="POST" action="{{ url_for('decide_project_application', application_id=app_item.id) }}" style="margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="accept">
+                    <button type="submit" class="btn btn-success btn-sm" {% if app_item.current_member_count >= app_item.max_members %}disabled title="Team is full"{% endif %}>
+                      Accept Application
+                    </button>
+                  </form>
+                  <form method="POST" action="{{ url_for('decide_project_application', application_id=app_item.id) }}" style="margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="reject">
+                    <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-error);">
+                      Reject
+                    </button>
+                  </form>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding: 20px;">
+        <p>No applications received yet for your projects.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- SECTION 3: Team Originality Checks (Automatic on Team Formation) -->
+  {% if originality_checks %}
+    <div class="card">
+      <div class="section-title">
+        <span>Automatic Originality Checks ({{ originality_checks|length }})</span>
+        <span style="font-size: 12px; color: var(--color-text-secondary); font-weight: normal;">
+          Triggered automatically when project teams reach full capacity
+        </span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        {% for oc in originality_checks %}
+          <div style="padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-bg);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 6px;">
+              <div>
+                <strong style="font-size: 14px;">{{ oc.project_title }}</strong>
+                <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 2px;">
+                  Trigger: <strong>{{ oc.trigger_event|replace('_', ' ')|capitalize }}</strong> &bull; Checked against <strong>{{ oc.compared_count }}</strong> existing projects in database &bull; {{ oc.created_at }}
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge {% if oc.similarity_category == 'High Similarity' %}badge-danger{% elif oc.similarity_category == 'Moderate Similarity' %}badge-warning{% else %}badge-success{% endif %}">
+                  {{ oc.highest_similarity }}% &bull; {{ oc.similarity_category }}
+                </span>
+                <form method="POST" action="{{ url_for('recheck_project_originality', project_id=oc.project_id) }}" style="margin: 0;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 4px 8px;">
+                    Re-check
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {% if oc.closest_project_title %}
+              <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 6px;">
+                Closest Match: <em>"{{ oc.closest_project_title }}"</em> ({{ oc.highest_similarity }}% similarity)
+              </div>
+            {% endif %}
+
+            {% if oc.highest_similarity >= 70 %}
+              <div style="margin-top: 8px; padding: 10px 12px; background: #fee2e2; border-left: 3px solid var(--color-error); border-radius: var(--radius-sm); font-size: 12px; color: #991b1b;">
+                <strong>Recommendation:</strong> Your project idea shows high similarity ({{ oc.highest_similarity }}%) with existing projects in the database. We recommend reviewing similar projects and refining your title and scope to highlight unique contributions.
+              </div>
+            {% endif %}
+
+            <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 8px; font-style: italic;">
+              Note: This is an honest platform text similarity check and not an automatic proof of academic plagiarism. Projects are not automatically rejected or blocked.
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- SECTION 4: Projects I've Joined -->
+  <div>
+    <div class="section-title">
+      <span>Projects I've Joined ({{ projects_joined|length }})</span>
+      <a href="{{ url_for('explore_projects') }}" class="btn btn-outline btn-sm">Explore Open Projects</a>
+    </div>
+
+    {% if projects_joined %}
+      <div class="grid-2">
+        {% for proj in projects_joined %}
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+              <span class="badge badge-primary">{{ proj.domain }}</span>
+              <span style="font-size: 12px; color: var(--color-text-secondary);">
+                Lead by: <strong>{{ proj.owner_name }}</strong>
+              </span>
+            </div>
+
+            <h3 style="margin-bottom: 8px;">{{ proj.title }}</h3>
+            <p style="color: var(--color-text-secondary); font-size: 13px; margin-bottom: 14px; line-height: 1.4;">
+              {{ proj.description }}
+            </p>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--color-border);">
+              <span style="font-size: 12px; color: var(--color-text-secondary);">
+                Team Size: {{ proj.member_count }} / {{ proj.max_members }}
+              </span>
+              <a href="{{ url_for('project_workspace', project_id=proj.id) }}" class="btn btn-primary btn-sm">
+                Open Workspace
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card empty-state">
+        <h4>You haven't joined any team projects yet</h4>
+        <p>Explore projects created by other students or wait for team invitations.</p>
+        <div style="margin-top: 14px;">
+          <a href="{{ url_for('explore_projects') }}" class="btn btn-outline btn-sm">Browse Explore Projects</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- SECTION 5: Two-Column Split (Invitations & My Applications) -->
+  <div class="grid-2">
+    <!-- Invitations Card -->
+    <div class="card">
+      <div class="section-title">
+        <span>Team Invitations Received ({{ invitations|length }})</span>
+        <a href="{{ url_for('received_invitations') }}" class="btn btn-outline btn-sm">View All &rarr;</a>
+      </div>
+
+      {% if invitations %}
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          {% for inv in invitations %}
+            <div style="padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-bg);">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                <div>
+                  <strong style="font-size: 13px;">{{ inv.project_title }}</strong>
+                  <div style="font-size: 11px; color: var(--color-text-secondary);">From: {{ inv.sender_name }} (Owner)</div>
+                </div>
+                <span class="badge {% if inv.status == 'pending' %}badge-warning{% elif inv.status == 'accepted' %}badge-success{% else %}badge-danger{% endif %}">
+                  {{ inv.status|capitalize }}
+                </span>
+              </div>
+
+              {% if inv.message %}
+                <p style="font-size: 12px; color: var(--color-text-secondary); margin: 6px 0;">"{{ inv.message }}"</p>
+              {% endif %}
+
+              {% if inv.status == 'pending' %}
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                  <form method="POST" action="{{ url_for('respond_invitation', invitation_id=inv.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="accept">
+                    <button type="submit" class="btn btn-success btn-sm">Accept</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('respond_invitation', invitation_id=inv.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="reject">
+                    <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-error);">Reject</button>
+                  </form>
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="padding: 24px 10px;">
+          <p>No invitations received yet.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- My Submitted Applications -->
+    <div class="card">
+      <div class="section-title">
+        <span>My Submitted Applications ({{ my_applications|length }})</span>
+      </div>
+
+      {% if my_applications %}
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          {% for app_sub in my_applications %}
+            <div style="padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-bg);">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                <div>
+                  <strong style="font-size: 13px;">{{ app_sub.project_title }}</strong>
+                  <div style="font-size: 11px; color: var(--color-text-secondary);">Lead by: {{ app_sub.owner_name }}</div>
+                </div>
+                <span class="badge {% if app_sub.status == 'pending' %}badge-warning{% elif app_sub.status == 'accepted' %}badge-success{% else %}badge-danger{% endif %}">
+                  {{ app_sub.status|capitalize }}
+                </span>
+              </div>
+              {% if app_sub.message %}
+                <p style="font-size: 12px; color: var(--color-text-secondary); margin: 6px 0;">"{{ app_sub.message }}"</p>
+              {% endif %}
+              <div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 4px;">Submitted: {{ app_sub.created_at }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="padding: 24px 10px;">
+          <p>You haven't submitted any project applications yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- SECTION 6: Notifications Card -->
+  <div class="card">
+    <div class="section-title">
+      <span>Notifications ({{ notifications|length }})</span>
+    </div>
+
+    {% if notifications %}
+      <div style="display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto;">
+        {% for n in notifications %}
+          <div style="padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: {% if not n.is_read %}var(--color-primary-light){% else %}#fff{% endif %}; font-size: 12px;">
+            <div style="color: var(--color-text-main); line-height: 1.4;">{{ n.message }}</div>
+            <div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 4px;">{{ n.created_at }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding: 24px 10px;">
+        <p>No notifications yet.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- SECTION 7: Task Progress -->
+  <div class="card">
+    <div class="section-title">
+      <span>Task Progress Overview</span>
+    </div>
+
+    {% if my_tasks %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Project</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for task in my_tasks %}
+              <tr>
+                <td><strong>{{ task.title }}</strong></td>
+                <td>{{ task.project_title }}</td>
+                <td>{{ task.assignee_name or 'Unassigned' }}</td>
+                <td>
+                  <span class="badge {% if task.status == 'completed' %}badge-success{% elif task.status == 'in_progress' %}badge-warning{% else %}badge-gray{% endif %}">
+                    {{ task.status|replace('_', ' ') }}
+                  </span>
+                </td>
+                <td>
+                  <a href="{{ url_for('project_workspace', project_id=task.project_id) }}" class="btn btn-outline btn-sm">
+                    Open Workspace
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>No active project tasks assigned to you right now.</p>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

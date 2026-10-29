@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Explore Projects - Student Project Finder{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Header Banner -->
+  <div class="card" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%); color: #fff; padding: 26px 30px; border-radius: var(--radius-lg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <h1 style="color: #fff; margin: 0 0 6px 0;">Explore Projects</h1>
+        <p style="color: rgba(255, 255, 255, 0.85); margin: 0; font-size: 13px;">
+          Personalized project recommendations ranked by skill alignment. Explore project details, inspect creator profiles, and apply to join teams.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('create_project') }}" class="btn" style="background-color: #fff; color: var(--color-primary); font-weight: 700;">
+          + Create Your Own Project
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Domain Filter Bar -->
+  <div class="card" style="padding: 18px 24px;">
+    <form method="GET" action="{{ url_for('explore_projects') }}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+      <div style="flex: 2; min-width: 240px;">
+        <input type="text" name="q" value="{{ query_search }}" class="form-input" placeholder="Search by project title, description, or skills...">
+      </div>
+
+      <div style="flex: 1; min-width: 180px;">
+        <select name="domain" class="form-select">
+          <option value="">All Domains</option>
+          {% for d in ["Artificial Intelligence", "Machine Learning", "Web Development", "Mobile Development", "Cybersecurity", "Cloud Computing", "IoT", "Data Science", "Blockchain", "Healthcare", "Education", "Finance"] %}
+            <option value="{{ d }}" {% if query_domain == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Filter</button>
+      {% if query_search or query_domain %}
+        <a href="{{ url_for('explore_projects') }}" class="btn btn-outline">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Recommendations Summary Bar -->
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+    <span style="font-size: 13px; font-weight: 700; color: var(--color-text-main);">
+      Open Projects ({{ projects|length }}) &bull; Ranked by Skill Matching Accuracy
+    </span>
+    <span style="font-size: 12px; color: var(--color-text-secondary);">
+      Formula: (Distinct Required Skills Matched &divide; Total Distinct Required Skills) &times; 100
+    </span>
+  </div>
+
+  <!-- Projects Grid -->
+  {% if projects %}
+    <div class="grid-3">
+      {% for proj in projects %}
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <!-- Header Badges -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+              <span class="badge badge-primary">{{ proj.domain }}</span>
+              {% if proj.matching_percentage is not none %}
+                <span class="badge {% if proj.matching_percentage >= 80 %}badge-excellent{% elif proj.matching_percentage >= 60 %}badge-good{% elif proj.matching_percentage >= 40 %}badge-partial{% else %}badge-low{% endif %}">
+                  {{ proj.matching_percentage }}% Match &bull; {{ proj.match_rating }}
+                </span>
+              {% endif %}
+            </div>
+
+            <!-- Title & Description -->
+            <h3 style="margin-bottom: 8px; font-size: 17px;">
+              <a href="{{ url_for('view_project_details', project_id=proj.id) }}" style="color: inherit; text-decoration: none;">
+                {{ proj.title }}
+              </a>
+            </h3>
+            <p style="color: var(--color-text-secondary); font-size: 13px; line-height: 1.4; margin-bottom: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+              {{ proj.description }}
+            </p>
+
+            <!-- Required Skills Section -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+                Required Technical Skills:
+              </div>
+              <div class="skills-container">
+                {% for sk in proj.required_skills %}
+                  <span class="skill-pill {% if sk|lower in proj.matched_skills|map('lower') %}skill-matched{% endif %}">
+                    {{ sk }}
+                  </span>
+                {% else %}
+                  <span style="font-size: 12px; color: var(--color-text-secondary);">General Skills</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Matching vs. Missing Skills Breakdown -->
+            {% if proj.required_skills %}
+              <div style="margin-bottom: 12px; font-size: 11px; padding: 8px 10px; background: var(--color-bg); border-radius: var(--radius-sm);">
+                {% if proj.matched_skills %}
+                  <div style="margin-bottom: 3px;">
+                    <span style="font-weight: 700; color: var(--color-success);">&check; Matching:</span>
+                    <span style="color: var(--color-text-main);">{{ proj.matched_skills|join(', ') }}</span>
+                  </div>
+                {% endif %}
+                {% if proj.missing_skills %}
+                  <div>
+                    <span style="font-weight: 700; color: var(--color-text-secondary);">&times; Missing:</span>
+                    <span style="color: var(--color-text-secondary);">{{ proj.missing_skills|join(', ') }}</span>
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            <!-- Team Capacity & Confirmed Members -->
+            <div style="margin-bottom: 14px; padding: 10px 12px; background: var(--color-bg); border-radius: var(--radius-md); font-size: 12px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Team Capacity:</span>
+                <strong>{{ proj.member_count }} / {{ proj.max_members }} Members</strong>
+              </div>
+              {% if proj.members %}
+                <div style="font-size: 11px; color: var(--color-text-secondary);">
+                  Confirmed: {% for m in proj.members %}<span>{{ m.name }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Bottom Action Bar -->
+          <div style="padding-top: 14px; border-top: 1px solid var(--color-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div style="font-size: 12px; color: var(--color-text-secondary);">
+                Owner: <a href="{{ url_for('view_student_profile', user_id=proj.owner_id, from_project=proj.id) }}" style="color: var(--color-primary); text-decoration: none;"><strong>{{ proj.owner_name }}</strong></a>
+              </div>
+
+              <div>
+                {% if proj.is_owner %}
+                  <span class="badge badge-primary">Your Project</span>
+                {% elif proj.is_member %}
+                  <span class="badge badge-success">Team Member</span>
+                {% elif proj.has_pending_application %}
+                  <span class="badge badge-warning" style="background: #fef3c7; color: #92400e;">Application Pending</span>
+                {% elif proj.is_full %}
+                  <span class="badge badge-gray" style="background: #e5e7eb; color: #4b5563;">Team Full</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- View Project Action & Apply Button -->
+            <div style="display: flex; gap: 8px;">
+              <a href="{{ url_for('view_project_details', project_id=proj.id) }}" class="btn btn-outline btn-sm" style="flex: 1; text-align: center;">
+                View Project &rarr;
+              </a>
+              {% if not proj.is_owner and not proj.is_member and not proj.is_full and not proj.has_pending_application %}
+                <button type="button" class="btn btn-primary btn-sm" onclick="toggleApplyForm('apply-form-{{ proj.id }}')">
+                  Apply to Join
+                </button>
+              {% endif %}
+            </div>
+
+            {% if not proj.is_owner and not proj.is_member and not proj.is_full and not proj.has_pending_application %}
+              <!-- Inline Application Form -->
+              <div id="apply-form-{{ proj.id }}" style="display: none; margin-top: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-primary); border-radius: var(--radius-md);">
+                <form method="POST" action="{{ url_for('apply_to_project', project_id=proj.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="next" value="{{ request.full_path }}">
+                  <label style="display: block; font-size: 11px; font-weight: 700; color: var(--color-text-main); margin-bottom: 4px;">
+                    Application Message:
+                  </label>
+                  <textarea name="message" class="form-textarea" rows="2" placeholder="Explain your interest and what skills you bring to this project team..." required style="font-size: 12px; margin-bottom: 8px;"></textarea>
+                  <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="toggleApplyForm('apply-form-{{ proj.id }}')">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Submit Application</button>
+                  </div>
+                </form>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <h3>No projects match your search criteria</h3>
+      <p>Try adjusting your search query or clearing filters.</p>
+      <div style="margin-top: 14px;">
+        <a href="{{ url_for('explore_projects') }}" class="btn btn-outline btn-sm">View All Projects</a>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+function toggleApplyForm(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.style.display === 'none' || el.style.display === '') {
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}

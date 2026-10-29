@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Student Project Finder & Originality Checker{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <a href="{% if session.get('role') == 'admin' %}{{ url_for('admin_dashboard') }}{% elif session.get('role') == 'student' %}{{ url_for('student_dashboard') }}{% else %}{{ url_for('login') }}{% endif %}" class="nav-brand">
+        <span>Student Project Finder</span>
+      </a>
+      {% if session.get('role') %}
+        <span class="nav-brand-badge">{{ session.get('role') }}</span>
+      {% endif %}
+    </div>
+
+    <nav class="nav-links">
+      {% if session.get('user_id') %}
+        {% if session.get('role') == 'admin' %}
+          <a href="{{ url_for('admin_dashboard') }}" class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">Admin Dashboard</a>
+        {% elif session.get('role') == 'student' %}
+          <a href="{{ url_for('student_dashboard') }}" class="nav-link {% if request.endpoint == 'student_dashboard' %}active{% endif %}">Dashboard</a>
+          <a href="{{ url_for('explore_projects') }}" class="nav-link {% if request.endpoint == 'explore_projects' %}active{% endif %}">Explore Projects</a>
+          <a href="{{ url_for('received_invitations') }}" class="nav-link {% if request.endpoint in ['received_invitations', 'sent_invitations'] %}active{% endif %}">Invitations</a>
+          <a href="{{ url_for('originality_checker') }}" class="nav-link {% if request.endpoint == 'originality_checker' %}active{% endif %}">Originality Checker</a>
+          <a href="{{ url_for('student_profile') }}" class="nav-link {% if request.endpoint == 'student_profile' %}active{% endif %}">My Profile</a>
+        {% endif %}
+      {% else %}
+        <a href="{{ url_for('login') }}" class="nav-link {% if request.endpoint == 'login' %}active{% endif %}">Sign In</a>
+        <a href="{{ url_for('register') }}" class="nav-link {% if request.endpoint == 'register' %}active{% endif %}">Request Account</a>
+        <a href="{{ url_for('check_registration_status') }}" class="nav-link {% if request.endpoint == 'check_registration_status' %}active{% endif %}">Check Status</a>
+      {% endif %}
+    </nav>
+
+    <div class="nav-user">
+      {% if session.get('user_id') %}
+        <span class="user-tag">{{ session.get('name') or session.get('email') }}</span>
+        <form action="{{ url_for('logout') }}" method="POST" style="display: inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-nav-logout">Log Out</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'error' else 'danger' }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    Student Project Finder & Originality Checker &copy; 2026. Simple, Functional & Reliable.
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

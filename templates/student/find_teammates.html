@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Find Matching Students - {{ project.title }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 24px;">
+
+  <!-- Breadcrumb & Project Header -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+      <div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">
+          <a href="{{ url_for('student_dashboard') }}" style="color: var(--color-primary); text-decoration: none;">&larr; Projects I Lead</a> / Find Matching Students (Find Teammates)
+        </div>
+        <h1 style="margin: 0 0 6px 0;">Find Matching Students</h1>
+        <p class="subtitle" style="margin: 0;">
+          Project: <strong>{{ project.title }}</strong> &bull; {{ project.domain }} &bull; Team Size: <strong>{{ members|length }}</strong> of {{ project.max_members }} Members
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('sent_invitations') }}" class="btn btn-outline btn-sm">
+          Sent Invitations
+        </a>
+        <a href="{{ url_for('edit_project', project_id=project.id) }}" class="btn btn-outline btn-sm">
+          Edit Requirements
+        </a>
+        <a href="{{ url_for('project_workspace', project_id=project.id) }}" class="btn btn-outline btn-sm">
+          Workspace
+        </a>
+      </div>
+    </div>
+
+    <!-- Required Skills Bar -->
+    <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--color-border);">
+      <div style="font-size: 12px; font-weight: 700; color: var(--color-text-main); margin-bottom: 8px;">
+        Project Target Skills for Matching ({{ required_skills|length }}):
+      </div>
+      <div class="skills-container">
+        {% for sk in required_skills %}
+          <span class="skill-pill">{{ sk }}</span>
+        {% else %}
+          <div style="background-color: var(--color-warning-light); color: var(--color-warning); padding: 12px 16px; border-radius: var(--radius-md); font-size: 13px; width: 100%;">
+            <strong>No required skills specified!</strong> Please click <strong>Edit Requirements</strong> above to add target technical skills before calculating matching accuracy.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Status / Capacity Notices -->
+  {% if project.status == 'closed' %}
+    <div class="alert alert-warning">
+      This project is currently marked as <strong>Closed</strong>. Recruitment is paused and student invitations cannot be sent until reopened.
+    </div>
+  {% elif is_full %}
+    <div class="alert alert-info">
+      This project team has reached maximum capacity ({{ members|length }}/{{ project.max_members }} members). No further student profiles can be invited.
+    </div>
+  {% endif %}
+
+  <!-- Recommended Matching Students Roster -->
+  {% if required_skills and not is_full and project.status == 'open' %}
+    <div>
+      <div class="section-title">
+        <span>Recommended Matching Students ({{ candidates|length }})</span>
+        <span style="font-size: 12px; color: var(--color-text-secondary); font-weight: normal;">
+          Ranked by: (Distinct Required Skills Matched &divide; Total Distinct Required Skills) &times; 100
+        </span>
+      </div>
+
+      {% if candidates %}
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          {% for cand in candidates %}
+            <div class="card" style="padding: 22px;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <h3 style="margin: 0; font-size: 17px;">{{ cand.name }}</h3>
+                    <span class="badge {% if cand.match_percentage >= 80 %}badge-excellent{% elif cand.match_percentage >= 60 %}badge-good{% elif cand.match_percentage >= 40 %}badge-partial{% else %}badge-low{% endif %}">
+                      {{ cand.match_percentage }}% Matching Accuracy &bull; {{ cand.match_category }}
+                    </span>
+                  </div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 3px;">
+                    {{ cand.department }} &bull; Semester {{ cand.semester }} {% if cand.section %}&bull; Section {{ cand.section }}{% endif %}
+                  </div>
+                </div>
+
+                <!-- Invite Action Button -->
+                <div>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="toggleInviteForm('invite-form-{{ cand.user_id }}')">
+                    Send Invitation
+                  </button>
+                </div>
+              </div>
+
+              <!-- Candidate Technical Skills -->
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
+                  Technical Skills ({{ cand.technical_skills|length }}):
+                </div>
+                <div class="skills-container">
+                  {% for ts in cand.technical_skills %}
+                    <span class="skill-pill">{{ ts }}</span>
+                  {% else %}
+                    <span style="font-size: 12px; color: var(--color-text-secondary); font-style: italic;">No skills listed</span>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <!-- Matching & Missing Skills Match Details -->
+              <div style="background-color: var(--color-bg); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: 12px;">
+                <!-- Matching Skills -->
+                <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--color-success); min-width: 105px;">
+                    Matching Skills ({{ cand.matched_skills|length }}):
+                  </span>
+                  {% for s in cand.matched_skills %}
+                    <span class="skill-pill matched">{{ s }}</span>
+                  {% else %}
+                    <span style="font-size: 12px; color: var(--color-text-secondary);">None</span>
+                  {% endfor %}
+                </div>
+
+                <!-- Missing Required Skills -->
+                <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); min-width: 105px;">
+                    Missing Skills ({{ cand.missing_skills|length }}):
+                  </span>
+                  {% for s in cand.missing_skills %}
+                    <span class="skill-pill missing">{{ s }}</span>
+                  {% else %}
+                    <span style="font-size: 12px; color: var(--color-success); font-weight: 600;">Complete Match (All project skills matched)</span>
+                  {% endfor %}
+                </div>
+              </div>
+
+              {% if cand.bio %}
+                <p style="font-size: 12px; color: var(--color-text-secondary); font-style: italic; margin: 0;">
+                  "{{ cand.bio }}"
+                </p>
+              {% endif %}
+
+              <!-- Expandable Inline Invitation Form -->
+              <div id="invite-form-{{ cand.user_id }}" style="display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--color-border);">
+                <form method="POST" action="{{ url_for('send_invitation', project_id=project.id) }}" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="recipient_id" value="{{ cand.user_id }}">
+                  <input type="text" name="message" class="form-input" style="flex: 1; min-width: 250px;" placeholder="Optional invitation note: We would love to collaborate with you on this project!">
+                  <button type="submit" class="btn btn-success btn-sm">Confirm &amp; Send Invitation</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="toggleInviteForm('invite-form-{{ cand.user_id }}')">Cancel</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card empty-state">
+          <h4>No eligible matching students found</h4>
+          <p>All other approved students are either already in this project, have a pending invitation, or no candidate profiles match the criteria.</p>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+  function toggleInviteForm(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+  }
+</script>
+{% endblock %}
