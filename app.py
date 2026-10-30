@@ -90,10 +90,15 @@ def admin_required(f):
     def decorated(*args, **kwargs):
         if "user_id" not in session:
             flash("Please sign in to access this page.", "warning")
-            return redirect(url_for("login"))
+            return redirect(url_for("admin_login"))
         if session.get("role") != "admin":
             flash("Access denied: Administrator permissions required.", "danger")
             return redirect(url_for("student_dashboard"))
+        user = db.query_one("SELECT role, status FROM users WHERE id = %s", (session["user_id"],))
+        if not user or user["role"] != "admin" or user.get("status") != "approved":
+            session.clear()
+            flash("Access denied: Unauthorized administrator session.", "danger")
+            return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
     return decorated
 
@@ -396,6 +401,48 @@ def login():
 
     return render_template("login.html")
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    """Dedicated administrative login endpoint accessed via the discreet icon."""
+    if "user_id" in session:
+        if session.get("role") == "admin":
+            return redirect(url_for("admin_dashboard"))
+        else:
+            flash("Access denied: You are signed in with a student account. Please sign out before accessing the Admin Portal.", "danger")
+            return redirect(url_for("student_dashboard"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not email or not password:
+            flash("Please enter both administrator email and password.", "error")
+            return render_template("admin/login.html")
+
+        user = db.query_one("SELECT * FROM users WHERE email = %s", (email,))
+        if not user or not check_password_hash(user["password_hash"], password):
+            flash("Invalid administrator credentials. Please verify your email and password.", "error")
+            return render_template("admin/login.html")
+
+        if user["role"] != "admin":
+            flash("Access denied: This portal is restricted to authorized administrators.", "error")
+            return render_template("admin/login.html")
+
+        if user.get("status") != "approved":
+            flash("Administrator account is inactive. Please contact system support.", "error")
+            return render_template("admin/login.html")
+
+        # Establish authenticated admin session
+        session.clear()
+        session["user_id"] = user["id"]
+        session["role"] = "admin"
+        session["email"] = user["email"]
+        session["name"] = "Administrator"
+        flash("Logged in successfully to Administrator Portal.", "success")
+        return redirect(url_for("admin_dashboard"))
+
+    return render_template("admin/login.html")
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if "user_id" in session:
@@ -404,32 +451,41 @@ def register():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
+        register_number = request.form.get("register_number", "").strip().upper()
         password = request.form.get("password", "")
         department = request.form.get("department", "").strip()
         semester = safe_int(request.form.get("semester"), default=1, min_val=1, max_val=8)
         section = request.form.get("section", "").strip()
         bio = request.form.get("bio", "").strip()
 
-        if not name or not email or not password or not department:
-            flash("Please fill in all required fields marked with an asterisk (*).", "error")
+        # Validate all required fields
+        if not name or not email or not register_number or not password or not department:
+            flash("Please fill in all required fields marked with an asterisk (*), including College Register Number.", "error")
             return render_template("register.html")
 
         if len(password) < 6:
             flash("Password must be at least 6 characters long.", "error")
             return render_template("register.html")
 
-        existing = db.query_one("SELECT id FROM users WHERE email = %s", (email,))
-        if existing:
-            flash("An account request with this email already exists. Please sign in or contact the admin.", "error")
+        # Prevent duplicate email
+        existing_email = db.query_one("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
+        if existing_email:
+            flash("An account request with this email address already exists. Please sign in or check your registration status.", "error")
+            return render_template("register.html")
+
+        # Prevent duplicate register number
+        existing_reg = db.query_one("SELECT id FROM users WHERE UPPER(register_number) = %s", (register_number,))
+        if existing_reg:
+            flash(f"A registration request or account with College Register Number '{register_number}' already exists.", "error")
             return render_template("register.html")
 
         pw_hash = generate_password_hash(password)
 
         try:
-            # Create user in 'pending' status awaiting admin approval
+            # Create user in 'pending' status awaiting manual admin verification
             user_id = db.execute(
-                "INSERT INTO users (email, password_hash, role, status) VALUES (%s, %s, 'student', 'pending')",
-                (email, pw_hash)
+                "INSERT INTO users (email, register_number, password_hash, role, status) VALUES (%s, %s, %s, 'student', 'pending')",
+                (email, register_number, pw_hash)
             )
             # Create associated profile
             db.execute(
@@ -465,7 +521,7 @@ def check_registration_status():
     if email_query:
         searched = True
         user = db.query_one(
-            """SELECT u.id, u.email, u.status, u.created_at, u.updated_at, sp.name, sp.department
+            """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at, sp.name, sp.department
                FROM users u
                LEFT JOIN student_profiles sp ON u.id = sp.user_id
                WHERE LOWER(u.email) = %s AND u.role = 'student'""",
@@ -474,6 +530,7 @@ def check_registration_status():
         if user:
             status_info = {
                 "email": user["email"],
+                "register_number": user.get("register_number"),
                 "name": user["name"] or user["email"],
                 "department": user["department"] or "Student",
                 "status": user["status"],
@@ -531,7 +588,44 @@ def student_profile():
     profile = db.query_one("SELECT * FROM student_profiles WHERE user_id = %s", (user_id,))
     skills = db.query_all("SELECT * FROM student_skills WHERE user_id = %s ORDER BY skill_name ASC", (user_id,))
 
-    return render_template("student/profile.html", user=user, profile=profile, skills=skills)
+    # Published projects where this student participated (as leader or member)
+    published_projects = db.query_all(
+        """SELECT p.id, p.title, p.description, p.domain, p.status, p.published_at, p.owner_id,
+                  tm.role as my_role
+           FROM projects p
+           JOIN team_members tm ON p.id = tm.project_id
+           WHERE tm.student_id = %s AND p.is_published = 1
+           ORDER BY p.published_at DESC, p.created_at DESC""",
+        (user_id,)
+    )
+    for p in published_projects:
+        # Full team roster with their assigned roles
+        p["team"] = db.query_all(
+            """SELECT tm.student_id, tm.role, sp.name, sp.department
+               FROM team_members tm
+               JOIN student_profiles sp ON tm.student_id = sp.user_id
+               WHERE tm.project_id = %s
+               ORDER BY (tm.student_id = %s) DESC, sp.name ASC""",
+            (p["id"], p["owner_id"])
+        )
+        # Specific tasks assigned to this student
+        p["my_tasks"] = db.query_all(
+            """SELECT id, title, description, status, priority, deadline
+               FROM tasks
+               WHERE project_id = %s AND assigned_to = %s
+               ORDER BY created_at DESC""",
+            (p["id"], user_id)
+        )
+        s_rows = db.query_all("SELECT skill_name FROM project_required_skills WHERE project_id = %s", (p["id"],))
+        p["required_skills"] = [s["skill_name"] for s in s_rows]
+
+    return render_template(
+        "student/profile.html",
+        user=user,
+        profile=profile,
+        skills=skills,
+        published_projects=published_projects
+    )
 
 @app.route("/student/skills/add", methods=["POST"])
 @student_required
@@ -945,12 +1039,42 @@ def view_student_profile(user_id):
     if from_project_id:
         from_project = db.query_one("SELECT id, title FROM projects WHERE id = %s", (from_project_id,))
 
+    # Published projects where this student participated (as leader or member)
+    published_projects = db.query_all(
+        """SELECT p.id, p.title, p.description, p.domain, p.status, p.published_at, p.owner_id,
+                  tm.role as member_role
+           FROM projects p
+           JOIN team_members tm ON p.id = tm.project_id
+           WHERE tm.student_id = %s AND p.is_published = 1
+           ORDER BY p.published_at DESC, p.created_at DESC""",
+        (user_id,)
+    )
+    for p in published_projects:
+        p["team"] = db.query_all(
+            """SELECT tm.student_id, tm.role, sp.name, sp.department
+               FROM team_members tm
+               JOIN student_profiles sp ON tm.student_id = sp.user_id
+               WHERE tm.project_id = %s
+               ORDER BY (tm.student_id = %s) DESC, sp.name ASC""",
+            (p["id"], p["owner_id"])
+        )
+        p["assigned_tasks"] = db.query_all(
+            """SELECT id, title, description, status, priority, deadline
+               FROM tasks
+               WHERE project_id = %s AND assigned_to = %s
+               ORDER BY created_at DESC""",
+            (p["id"], user_id)
+        )
+        s_rows = db.query_all("SELECT skill_name FROM project_required_skills WHERE project_id = %s", (p["id"],))
+        p["required_skills"] = [s["skill_name"] for s in s_rows]
+
     return render_template(
         "student/public_profile.html",
         student_user=student_user,
         profile=profile,
         skills=skills,
         projects_led=projects_led,
+        published_projects=published_projects,
         from_project=from_project
     )
 
@@ -1711,8 +1835,8 @@ def project_workspace(project_id):
            FROM team_members tm
            JOIN student_profiles sp ON tm.student_id = sp.user_id
            WHERE tm.project_id = %s
-           ORDER BY (tm.role = 'owner') DESC, sp.name ASC""",
-        (project_id,)
+           ORDER BY (tm.student_id = %s) DESC, sp.name ASC""",
+        (project_id, project["owner_id"])
     )
 
     # Required skills
@@ -1748,6 +1872,158 @@ def project_workspace(project_id):
         progress_pct=progress_pct
     )
 
+@app.route("/projects/<int:project_id>/finalize-team", methods=["GET", "POST"])
+@student_required
+def finalize_team(project_id):
+    user_id = session["user_id"]
+
+    project = db.query_one(
+        """SELECT p.*, sp.name as owner_name
+           FROM projects p
+           JOIN users u ON p.owner_id = u.id
+           JOIN student_profiles sp ON u.id = sp.user_id
+           WHERE p.id = %s""",
+        (project_id,)
+    )
+    if not project:
+        abort(404, description="Project not found.")
+
+    if project["owner_id"] != user_id:
+        flash("Only the project leader can finalize the team and assign roles.", "error")
+        return redirect(url_for("project_workspace", project_id=project_id))
+
+    if request.method == "POST":
+        # 1. Team Completed: retrieve confirmed members belonging to this team
+        member_rows = db.query_all(
+            "SELECT student_id FROM team_members WHERE project_id = %s",
+            (project_id,)
+        )
+        valid_member_ids = {m["student_id"] for m in member_rows}
+
+        if not valid_member_ids:
+            flash("No confirmed team members found for this project.", "error")
+            return redirect(url_for("project_workspace", project_id=project_id))
+
+        # 2. Assign Roles: validate and save role assignments to MySQL
+        for s_id in valid_member_ids:
+            role_choice = request.form.get(f"role_{s_id}", "").strip()
+            custom_role = request.form.get(f"custom_role_{s_id}", "").strip()
+
+            if role_choice == "Custom":
+                assigned_role = custom_role if custom_role else "Specialist"
+            elif role_choice:
+                assigned_role = role_choice
+            else:
+                assigned_role = "Member"
+
+            db.execute(
+                "UPDATE team_members SET role = %s WHERE project_id = %s AND student_id = %s",
+                (assigned_role, project_id, s_id)
+            )
+
+        # 3. Assign Tasks: validate and save new tasks with priority and deadline
+        titles = request.form.getlist("new_task_title[]")
+        assignees = request.form.getlist("new_task_assignee[]")
+        priorities = request.form.getlist("new_task_priority[]")
+        deadlines = request.form.getlist("new_task_deadline[]")
+        descs = request.form.getlist("new_task_desc[]")
+
+        created_tasks_count = 0
+        for i in range(len(titles)):
+            task_title = titles[i].strip() if i < len(titles) else ""
+            if not task_title:
+                continue
+
+            assignee_val = assignees[i].strip() if i < len(assignees) else ""
+            assignee_id = None
+            if assignee_val:
+                try:
+                    aid = int(assignee_val)
+                    if aid in valid_member_ids:
+                        assignee_id = aid
+                except (ValueError, TypeError):
+                    assignee_id = None
+
+            priority_val = priorities[i].strip().lower() if i < len(priorities) else "medium"
+            if priority_val not in ("low", "medium", "high"):
+                priority_val = "medium"
+
+            deadline_val = deadlines[i].strip() if i < len(deadlines) else ""
+            deadline_str = deadline_val if deadline_val else None
+
+            task_desc = descs[i].strip() if i < len(descs) else ""
+
+            db.execute(
+                """INSERT INTO tasks (project_id, title, description, assigned_to, status, priority, deadline, created_by)
+                   VALUES (%s, %s, %s, %s, 'to_do', %s, %s, %s)""",
+                (project_id, task_title, task_desc, assignee_id, priority_val, deadline_str, user_id)
+            )
+            created_tasks_count += 1
+
+            if assignee_id and assignee_id != user_id:
+                create_notification(
+                    assignee_id,
+                    f"You have been assigned task '{task_title}' for project '{project['title']}'."
+                )
+
+        # 4. Save to MySQL & Publish Project
+        publish_now = request.form.get("publish_now", "0") in ("1", "true", "True")
+        if publish_now:
+            db.execute(
+                "UPDATE projects SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (project_id,)
+            )
+            for s_id in valid_member_ids:
+                if s_id != user_id:
+                    create_notification(
+                        s_id,
+                        f"Project '{project['title']}' has been finalized and published! It is now featured on your student profile."
+                    )
+            success_msg = f"Project '{project['title']}' has been finalized, saved to the database, and successfully published to participating students' profiles!"
+        else:
+            success_msg = f"Roles and tasks for '{project['title']}' have been saved as draft."
+
+        is_ajax = (request.headers.get("X-Requested-With") == "XMLHttpRequest" or
+                   request.content_type == "application/json" or
+                   request.accept_mimetypes.best == "application/json")
+
+        if is_ajax:
+            return jsonify({
+                "success": True,
+                "message": success_msg,
+                "redirect_url": url_for("project_workspace", project_id=project_id)
+            })
+        else:
+            flash(success_msg, "success")
+            return redirect(url_for("project_workspace", project_id=project_id))
+
+    # GET: Retrieve confirmed members & existing tasks
+    members = db.query_all(
+        """SELECT tm.*, sp.name, sp.department, sp.semester
+           FROM team_members tm
+           JOIN student_profiles sp ON tm.student_id = sp.user_id
+           WHERE tm.project_id = %s
+           ORDER BY (tm.student_id = %s) DESC, sp.name ASC""",
+        (project_id, user_id)
+    )
+
+    existing_tasks = db.query_all(
+        """SELECT t.*, sp.name as assignee_name
+           FROM tasks t
+           LEFT JOIN users u ON t.assigned_to = u.id
+           LEFT JOIN student_profiles sp ON u.id = sp.user_id
+           WHERE t.project_id = %s
+           ORDER BY t.created_at DESC""",
+        (project_id,)
+    )
+
+    return render_template(
+        "student/finalize_team.html",
+        project=project,
+        members=members,
+        existing_tasks=existing_tasks
+    )
+
 @app.route("/projects/<int:project_id>/tasks/create", methods=["POST"])
 @student_required
 def create_task(project_id):
@@ -1765,6 +2041,11 @@ def create_task(project_id):
     description = request.form.get("description", "").strip()
     assigned_to_raw = request.form.get("assigned_to", "")
     status = request.form.get("status", "to_do")
+    priority = request.form.get("priority", "medium").strip().lower()
+    if priority not in ("low", "medium", "high"):
+        priority = "medium"
+    deadline_raw = request.form.get("deadline", "").strip()
+    deadline = deadline_raw if deadline_raw else None
 
     if not title:
         flash("Task title is required.", "error")
@@ -1783,9 +2064,9 @@ def create_task(project_id):
             return redirect(url_for("project_workspace", project_id=project_id))
 
     db.execute(
-        """INSERT INTO tasks (project_id, title, description, assigned_to, status, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
-        (project_id, title, description, assigned_to, status, user_id)
+        """INSERT INTO tasks (project_id, title, description, assigned_to, status, priority, deadline, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+        (project_id, title, description, assigned_to, status, priority, deadline, user_id)
     )
 
     # Real notification on assignment (Section 12)
@@ -2513,7 +2794,7 @@ def admin_dashboard():
     # Filtered requests query
     if status_filter == "pending":
         requests_list = db.query_all(
-            """SELECT u.id, u.email, u.status, u.created_at, u.updated_at,
+            """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at,
                       sp.name, sp.department, sp.semester, sp.section
                FROM users u
                JOIN student_profiles sp ON u.id = sp.user_id
@@ -2522,7 +2803,7 @@ def admin_dashboard():
         )
     elif status_filter == "approved":
         requests_list = db.query_all(
-            """SELECT u.id, u.email, u.status, u.created_at, u.updated_at,
+            """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at,
                       sp.name, sp.department, sp.semester, sp.section,
                       (SELECT COUNT(*) FROM student_skills WHERE user_id = u.id) as skills_count
                FROM users u
@@ -2532,7 +2813,7 @@ def admin_dashboard():
         )
     elif status_filter == "rejected":
         requests_list = db.query_all(
-            """SELECT u.id, u.email, u.status, u.created_at, u.updated_at,
+            """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at,
                       sp.name, sp.department, sp.semester, sp.section
                FROM users u
                JOIN student_profiles sp ON u.id = sp.user_id
@@ -2541,7 +2822,7 @@ def admin_dashboard():
         )
     else:  # all
         requests_list = db.query_all(
-            """SELECT u.id, u.email, u.status, u.created_at, u.updated_at,
+            """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at,
                       sp.name, sp.department, sp.semester, sp.section
                FROM users u
                JOIN student_profiles sp ON u.id = sp.user_id
@@ -2551,12 +2832,12 @@ def admin_dashboard():
 
     # Maintain existing pending_requests and approved_students for backward compatibility
     pending_requests = [r for r in requests_list if r["status"] == "pending"] if status_filter in ("pending", "all") else db.query_all(
-        """SELECT u.id, u.email, u.status, u.created_at, u.updated_at, sp.name, sp.department, sp.semester, sp.section
+        """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at, sp.name, sp.department, sp.semester, sp.section
            FROM users u JOIN student_profiles sp ON u.id = sp.user_id
            WHERE u.role = 'student' AND u.status = 'pending' ORDER BY u.created_at ASC"""
     )
     approved_students = db.query_all(
-        """SELECT u.id, u.email, u.status, u.created_at, u.updated_at, sp.name, sp.department, sp.semester, sp.section,
+        """SELECT u.id, u.email, u.register_number, u.status, u.created_at, u.updated_at, sp.name, sp.department, sp.semester, sp.section,
                   (SELECT COUNT(*) FROM student_skills WHERE user_id = u.id) as skills_count
            FROM users u JOIN student_profiles sp ON u.id = sp.user_id
            WHERE u.role = 'student' AND u.status = 'approved' ORDER BY sp.name ASC"""

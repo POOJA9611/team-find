@@ -21,6 +21,7 @@ def seed_demo():
         {
             "name": "Alex Chen",
             "email": "alex@student.edu",
+            "register_number": "REG-21CS001",
             "password": generate_password_hash("Student@2026"),
             "department": "Computer Science & Engineering",
             "semester": 6,
@@ -32,6 +33,7 @@ def seed_demo():
         {
             "name": "Maya Patel",
             "email": "maya@student.edu",
+            "register_number": "REG-21IT002",
             "password": generate_password_hash("Student@2026"),
             "department": "Information Technology",
             "semester": 6,
@@ -43,6 +45,7 @@ def seed_demo():
         {
             "name": "Liam Davis",
             "email": "liam@student.edu",
+            "register_number": "REG-21DS003",
             "password": generate_password_hash("Student@2026"),
             "department": "Data Science",
             "semester": 6,
@@ -54,6 +57,7 @@ def seed_demo():
         {
             "name": "Pooja Sharma",
             "email": "pooja@student.edu",
+            "register_number": "REG-21CS004",
             "password": generate_password_hash("Student@2026"),
             "department": "Computer Science & Engineering",
             "semester": 6,
@@ -65,6 +69,7 @@ def seed_demo():
         {
             "name": "John Pending",
             "email": "john.pending@student.edu",
+            "register_number": "REG-22EE005",
             "password": generate_password_hash("Student@2026"),
             "department": "Electrical Engineering",
             "semester": 4,
@@ -80,14 +85,15 @@ def seed_demo():
 
     for s in students:
         status = s.get("status", "approved")
+        reg_no = s.get("register_number")
         existing = db.query_one("SELECT id FROM users WHERE email = %s", (s["email"],))
         if existing:
             uid = existing["id"]
-            db.execute("UPDATE users SET status = %s WHERE id = %s", (status, uid))
+            db.execute("UPDATE users SET status = %s, register_number = COALESCE(register_number, %s) WHERE id = %s", (status, reg_no, uid))
         else:
             uid = db.execute(
-                "INSERT INTO users (email, password_hash, role, status) VALUES (%s, %s, %s, %s)",
-                (s["email"], s["password"], "student", status)
+                "INSERT INTO users (email, register_number, password_hash, role, status) VALUES (%s, %s, %s, %s, %s)",
+                (s["email"], reg_no, s["password"], "student", status)
             )
 
         student_ids[s["email"]] = uid
