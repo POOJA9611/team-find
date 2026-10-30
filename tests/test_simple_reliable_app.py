@@ -62,6 +62,7 @@ class TestSimpleReliableApp(unittest.TestCase):
         reg_data = {
             "name": "Sarah Connor",
             "email": "sarah@student.edu",
+            "register_number": "REG-SARAH001",
             "password": "Password@123",
             "department": "Cybernetics",
             "semester": "4",
@@ -989,6 +990,7 @@ class TestSimpleReliableApp(unittest.TestCase):
         reg_data = {
             "name": "Thomas Anderson",
             "email": "neo@student.edu",
+            "register_number": "REG-NEO001",
             "password": "MatrixPassword@2026",
             "department": "Computer Science & Engineering",
             "semester": "6",
@@ -1108,6 +1110,292 @@ class TestSimpleReliableApp(unittest.TestCase):
         # 9. Non-existent email search does not reveal internal details
         res_unknown = cypher_client.get("/check-status?email=nonexistent@college.edu")
         self.assertIn("No registration request found for this email address", res_unknown.get_data(as_text=True))
+
+    # -------------------------------------------------------------
+    # 16. Student Registration with Manual Admin Verification & Discreet Admin Icon
+    # -------------------------------------------------------------
+    def test_16_manual_admin_verification_discreet_icon_and_check_status_cleanup(self):
+        # Clean test user if present
+        db.execute("DELETE FROM users WHERE email IN ('trinity@student.edu', 'morpheus@student.edu')")
+
+        # 1. Registration form validation: Missing register_number is rejected
+        client = app.test_client()
+        csrf = self.get_session_csrf(client)
+        bad_reg = {
+            "name": "Trinity Matrix",
+            "email": "trinity@student.edu",
+            "register_number": "",  # Missing
+            "password": "TrinitySecret@2026",
+            "department": "Cybersecurity",
+            "semester": "6",
+            "section": "A",
+            "csrf_token": csrf
+        }
+        res_bad = client.post("/register", data=bad_reg, follow_redirects=True)
+        self.assertIn("College Register Number", res_bad.get_data(as_text=True))
+
+        # 2. Register number duplicate check
+        # Use an existing register number from demo student Alex Chen (REG-21CS001)
+        dup_reg = {
+            "name": "Trinity Matrix",
+            "email": "trinity@student.edu",
+            "register_number": "REG-21CS001",  # Duplicate
+            "password": "TrinitySecret@2026",
+            "department": "Cybersecurity",
+            "semester": "6",
+            "section": "A",
+            "csrf_token": self.get_session_csrf(client)
+        }
+        res_dup = client.post("/register", data=dup_reg, follow_redirects=True)
+        self.assertIn("already exists", res_dup.get_data(as_text=True))
+
+        # 3. Successful registration with unique register number
+        valid_reg = {
+            "name": "Trinity Matrix",
+            "email": "trinity@student.edu",
+            "register_number": "REG-TRINITY99",
+            "password": "TrinitySecret@2026",
+            "department": "Cybersecurity",
+            "semester": "6",
+            "section": "A",
+            "csrf_token": self.get_session_csrf(client)
+        }
+        res_ok = client.post("/register", data=valid_reg, follow_redirects=True)
+        self.assertIn("submitted successfully", res_ok.get_data(as_text=True))
+
+        # Saved as pending with register_number in database
+        trin_user = db.query_one("SELECT * FROM users WHERE email = 'trinity@student.edu'")
+        self.assertIsNotNone(trin_user)
+        self.assertEqual(trin_user["status"], "pending")
+        self.assertEqual(trin_user["register_number"], "REG-TRINITY99")
+
+        # 4. Check Status Page verification:
+        # Static "How the student will know" section MUST BE REMOVED
+        res_status = client.get("/check-status?email=trinity@student.edu")
+        status_html = res_status.get_data(as_text=True)
+        self.assertNotIn("How the student will know", status_html)
+        self.assertIn("REG-TRINITY99", status_html)
+        self.assertIn("Pending", status_html)
+        self.assertIn("Your registration is awaiting Admin approval.", status_html)
+
+        # 5. Admin Dashboard Manual Verification
+        admin_client = app.test_client()
+        self.login_user("admin@college.edu", "AdminSecure@2026", client=admin_client)
+        res_dash = admin_client.get("/admin/dashboard?status=pending")
+        dash_html = res_dash.get_data(as_text=True)
+        self.assertIn("Manual Verification Required", dash_html)
+        self.assertIn("College Register No.", dash_html)
+        self.assertIn("REG-TRINITY99", dash_html)
+        self.assertIn("Trinity Matrix", dash_html)
+
+        # Admin approves Trinity
+        admin_csrf = self.get_session_csrf(admin_client)
+        res_apprv = admin_client.post(
+            f"/admin/accounts/{trin_user['id']}/decide",
+            data={"decision": "approve", "csrf_token": admin_csrf},
+            follow_redirects=True
+        )
+        self.assertIn("approved successfully", res_apprv.get_data(as_text=True))
+
+        # Trinity can now log in
+        trin_client = app.test_client()
+        res_trin_login = self.login_user("trinity@student.edu", "TrinitySecret@2026", client=trin_client)
+        self.assertIn("Welcome back, Trinity Matrix!", res_trin_login.get_data(as_text=True))
+
+        # 6. Discreet Admin Icon on Student Login Interface
+        res_login_page = client.get("/login")
+        login_html = res_login_page.get_data(as_text=True)
+        # Must have link to admin login
+        self.assertIn("/admin/login", login_html)
+        # Must NOT display prominent "Admin Login" text
+        self.assertNotIn(">Admin Login<", login_html)
+        # Must NOT show demo credentials
+        self.assertNotIn("Quick 1-Click Demo Credentials", login_html)
+
+        # 7. Dedicated Admin Login Form (/admin/login)
+        res_admin_login_get = client.get("/admin/login")
+        self.assertEqual(res_admin_login_get.status_code, 200)
+        admin_login_html = res_admin_login_get.get_data(as_text=True)
+        self.assertIn("Administrator Portal", admin_login_html)
+        self.assertNotIn("Quick 1-Click Demo Credentials", admin_login_html)
+
+        # Student cannot log in at /admin/login
+        admin_csrf = self.get_session_csrf(client)
+        res_student_admin_attempt = client.post(
+            "/admin/login",
+            data={"email": "trinity@student.edu", "password": "TrinitySecret@2026", "csrf_token": admin_csrf},
+            follow_redirects=True
+        )
+        self.assertIn("restricted to authorized administrators", res_student_admin_attempt.get_data(as_text=True))
+
+        # Genuine Admin logs in at /admin/login
+        res_admin_success = client.post(
+            "/admin/login",
+            data={"email": "admin@college.edu", "password": "AdminSecure@2026", "csrf_token": self.get_session_csrf(client)},
+            follow_redirects=True
+        )
+        self.assertIn("Administrator Executive Dashboard", res_admin_success.get_data(as_text=True))
+
+        # Signed in student visiting /admin/login is denied and redirected to student_dashboard
+        res_trin_admin_visit = trin_client.get("/admin/login", follow_redirects=True)
+        self.assertIn("Access denied: You are signed in with a student account", res_trin_admin_visit.get_data(as_text=True))
+
+    # -------------------------------------------------------------
+    # 17. Team Completion, Role Assignment, Task Assignment & Project Publishing
+    # -------------------------------------------------------------
+    def test_17_team_completion_roles_tasks_and_publishing(self):
+        """
+        Verify complete end-to-end workflow:
+        Team Completed -> Assign Roles -> Assign Tasks -> Save to MySQL -> Display Published Project on Profiles
+        """
+        # 1. Fetch approved student accounts
+        leader = db.query_one("SELECT * FROM users WHERE email = 'alex@student.edu'")
+        member1 = db.query_one("SELECT * FROM users WHERE email = 'maya@student.edu'")
+        member2 = db.query_one("SELECT * FROM users WHERE email = 'liam@student.edu'")
+        non_member = db.query_one("SELECT * FROM users WHERE email = 'pooja@student.edu'")
+
+        self.assertIsNotNone(leader)
+        self.assertIsNotNone(member1)
+        self.assertIsNotNone(member2)
+
+        # 2. Leader creates a project
+        leader_client = app.test_client()
+        self.login_user("alex@student.edu", "Student@2026", client=leader_client)
+
+        db.execute("DELETE FROM projects WHERE title = 'Autonomous Drone Navigation System'")
+        p_id = db.execute(
+            """INSERT INTO projects (owner_id, title, description, domain, max_members, status, is_published)
+               VALUES (%s, 'Autonomous Drone Navigation System', 'An edge-AI drone vision project for obstacle avoidance.', 'Robotics', 4, 'open', 0)""",
+            (leader["id"],)
+        )
+
+        # Creator is automatically added to team_members
+        db.execute("INSERT INTO team_members (project_id, student_id, role) VALUES (%s, %s, 'owner')", (p_id, leader["id"]))
+        # Add confirmed members
+        db.execute("INSERT INTO team_members (project_id, student_id, role) VALUES (%s, %s, 'member')", (p_id, member1["id"]))
+        db.execute("INSERT INTO team_members (project_id, student_id, role) VALUES (%s, %s, 'member')", (p_id, member2["id"]))
+
+        # 3. Non-leader cannot finalize team
+        member_client = app.test_client()
+        self.login_user("maya@student.edu", "Student@2026", client=member_client)
+        res_unauth = member_client.get(f"/projects/{p_id}/finalize-team", follow_redirects=True)
+        self.assertIn("Only the project leader can finalize the team and assign roles", res_unauth.get_data(as_text=True))
+
+        # 4. Leader accesses finalize-team interface (GET)
+        res_get_finalize = leader_client.get(f"/projects/{p_id}/finalize-team")
+        self.assertEqual(res_get_finalize.status_code, 200)
+        finalize_html = res_get_finalize.get_data(as_text=True)
+        self.assertIn("Finalize Team & Assign Roles", finalize_html)
+        self.assertIn("Alex Chen", finalize_html)
+        self.assertIn("Maya Patel", finalize_html)
+        self.assertIn("Liam Davis", finalize_html)
+
+        # 5. Leader assigns roles, assigns tasks with priority & deadline, and publishes project (POST)
+        csrf = self.get_session_csrf(leader_client)
+        post_data = {
+            "csrf_token": csrf,
+            "publish_now": "1",
+            # Roles for each member
+            f"role_{leader['id']}": "Project Lead / System Architect",
+            f"role_{member1['id']}": "Frontend Developer / UI Designer",
+            f"role_{member2['id']}": "Custom",
+            f"custom_role_{member2['id']}": "Hardware Integration Specialist",
+            # Milestone tasks
+            "new_task_title[]": [
+                "Architect Flight Controller Interface",
+                "Design Real-Time Telemetry Dashboard",
+                "Calibrate LiDAR Depth Sensor Feed"
+            ],
+            "new_task_assignee[]": [
+                str(leader["id"]),
+                str(member1["id"]),
+                str(member2["id"])
+            ],
+            "new_task_priority[]": ["high", "medium", "high"],
+            "new_task_deadline[]": ["2026-11-15", "2026-11-20", "2026-11-25"],
+            "new_task_desc[]": [
+                "Implement robust MAVLink communication layer.",
+                "Build modern dashboard with responsive telemetry charts.",
+                "Integrate and benchmark obstacle detection algorithms."
+            ]
+        }
+
+        res_post_finalize = leader_client.post(
+            f"/projects/{p_id}/finalize-team",
+            data=post_data,
+            follow_redirects=True
+        )
+        self.assertEqual(res_post_finalize.status_code, 200)
+        post_response_text = res_post_finalize.get_data(as_text=True)
+        self.assertIn("successfully published", post_response_text)
+
+        # 6. Verify Database State
+        project_db = db.query_one("SELECT * FROM projects WHERE id = %s", (p_id,))
+        self.assertTrue(bool(project_db["is_published"]))
+        self.assertIsNotNone(project_db["published_at"])
+
+        # Check roles in team_members
+        tm_leader = db.query_one("SELECT role FROM team_members WHERE project_id = %s AND student_id = %s", (p_id, leader["id"]))
+        tm_member1 = db.query_one("SELECT role FROM team_members WHERE project_id = %s AND student_id = %s", (p_id, member1["id"]))
+        tm_member2 = db.query_one("SELECT role FROM team_members WHERE project_id = %s AND student_id = %s", (p_id, member2["id"]))
+
+        self.assertEqual(tm_leader["role"], "Project Lead / System Architect")
+        self.assertEqual(tm_member1["role"], "Frontend Developer / UI Designer")
+        self.assertEqual(tm_member2["role"], "Hardware Integration Specialist")
+
+        # Check tasks saved with priority, deadline, assignee
+        saved_tasks = db.query_all("SELECT * FROM tasks WHERE project_id = %s ORDER BY id ASC", (p_id,))
+        self.assertEqual(len(saved_tasks), 3)
+        self.assertEqual(saved_tasks[0]["title"], "Architect Flight Controller Interface")
+        self.assertEqual(saved_tasks[0]["assigned_to"], leader["id"])
+        self.assertEqual(saved_tasks[0]["priority"], "high")
+        self.assertEqual(str(saved_tasks[0]["deadline"]), "2026-11-15")
+
+        self.assertEqual(saved_tasks[1]["title"], "Design Real-Time Telemetry Dashboard")
+        self.assertEqual(saved_tasks[1]["assigned_to"], member1["id"])
+        self.assertEqual(saved_tasks[1]["priority"], "medium")
+
+        self.assertEqual(saved_tasks[2]["title"], "Calibrate LiDAR Depth Sensor Feed")
+        self.assertEqual(saved_tasks[2]["assigned_to"], member2["id"])
+        self.assertEqual(saved_tasks[2]["priority"], "high")
+
+        # 7. Verify Display on Participating Students' Profiles
+        # Leader's own profile (/student/profile)
+        res_leader_prof = leader_client.get("/student/profile")
+        leader_prof_html = res_leader_prof.get_data(as_text=True)
+        self.assertIn("Autonomous Drone Navigation System", leader_prof_html)
+        self.assertIn("Project Lead / System Architect", leader_prof_html)
+        self.assertIn("Architect Flight Controller Interface", leader_prof_html)
+        self.assertIn("Frontend Developer / UI Designer", leader_prof_html)
+        self.assertIn("Hardware Integration Specialist", leader_prof_html)
+
+        # Member 1's own profile (/student/profile)
+        res_m1_prof = member_client.get("/student/profile")
+        m1_prof_html = res_m1_prof.get_data(as_text=True)
+        self.assertIn("Autonomous Drone Navigation System", m1_prof_html)
+        self.assertIn("Frontend Developer / UI Designer", m1_prof_html)
+        self.assertIn("Design Real-Time Telemetry Dashboard", m1_prof_html)
+
+        # Public Profile of Member 2 (/students/<id>)
+        res_m2_pub = leader_client.get(f"/students/{member2['id']}")
+        m2_pub_html = res_m2_pub.get_data(as_text=True)
+        self.assertIn("Autonomous Drone Navigation System", m2_pub_html)
+        self.assertIn("Hardware Integration Specialist", m2_pub_html)
+        self.assertIn("Calibrate LiDAR Depth Sensor Feed", m2_pub_html)
+
+        # Non-participating student profile does NOT feature this project
+        if non_member:
+            res_non_pub = leader_client.get(f"/students/{non_member['id']}")
+            non_pub_html = res_non_pub.get_data(as_text=True)
+            self.assertNotIn("Autonomous Drone Navigation System", non_pub_html)
+
+        # 8. Workspace displays Published badge & allows further task creation with priority
+        res_ws = leader_client.get(f"/projects/{p_id}/workspace")
+        ws_html = res_ws.get_data(as_text=True)
+        self.assertIn("Published", ws_html)
+        self.assertIn("Manage Roles & Tasks", ws_html)
+        self.assertIn("Architect Flight Controller Interface", ws_html)
+        self.assertIn("High", ws_html)
 
 
 if __name__ == "__main__":
