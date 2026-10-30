@@ -57,86 +57,93 @@
 
   <!-- Projects Grid -->
   {% if projects %}
-    <div class="grid-3">
+    <div class="explore-grid">
       {% for proj in projects %}
-        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <!-- Header Badges -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
-              <span class="badge badge-primary">{{ proj.domain }}</span>
-              {% if proj.matching_percentage is not none %}
-                <span class="badge {% if proj.matching_percentage >= 80 %}badge-excellent{% elif proj.matching_percentage >= 60 %}badge-good{% elif proj.matching_percentage >= 40 %}badge-partial{% else %}badge-low{% endif %}">
-                  {{ proj.matching_percentage }}% Match &bull; {{ proj.match_rating }}
-                </span>
-              {% endif %}
-            </div>
-
-            <!-- Title & Description -->
-            <h3 style="margin-bottom: 8px; font-size: 17px;">
-              <a href="{{ url_for('view_project_details', project_id=proj.id) }}" style="color: inherit; text-decoration: none;">
-                {{ proj.title }}
-              </a>
-            </h3>
-            <p style="color: var(--color-text-secondary); font-size: 13px; line-height: 1.4; margin-bottom: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
-              {{ proj.description }}
-            </p>
-
-            <!-- Required Skills Section -->
-            <div style="margin-bottom: 12px;">
-              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 6px;">
-                Required Technical Skills:
-              </div>
-              <div class="skills-container">
-                {% for sk in proj.required_skills %}
-                  <span class="skill-pill {% if sk|lower in proj.matched_skills|map('lower') %}skill-matched{% endif %}">
-                    {{ sk }}
-                  </span>
-                {% else %}
-                  <span style="font-size: 12px; color: var(--color-text-secondary);">General Skills</span>
-                {% endfor %}
-              </div>
-            </div>
-
-            <!-- Matching vs. Missing Skills Breakdown -->
-            {% if proj.required_skills %}
-              <div style="margin-bottom: 12px; font-size: 11px; padding: 8px 10px; background: var(--color-bg); border-radius: var(--radius-sm);">
-                {% if proj.matched_skills %}
-                  <div style="margin-bottom: 3px;">
-                    <span style="font-weight: 700; color: var(--color-success);">&check; Matching:</span>
-                    <span style="color: var(--color-text-main);">{{ proj.matched_skills|join(', ') }}</span>
-                  </div>
-                {% endif %}
-                {% if proj.missing_skills %}
-                  <div>
-                    <span style="font-weight: 700; color: var(--color-text-secondary);">&times; Missing:</span>
-                    <span style="color: var(--color-text-secondary);">{{ proj.missing_skills|join(', ') }}</span>
-                  </div>
-                {% endif %}
-              </div>
+        <div class="card explore-card">
+          <!-- 1. Category badge and match-score badge -->
+          <div class="explore-card-header">
+            <span class="badge badge-primary">{{ proj.domain }}</span>
+            {% if proj.matching_percentage is not none %}
+              <span class="badge {% if proj.matching_percentage >= 80 %}badge-excellent{% elif proj.matching_percentage >= 60 %}badge-good{% elif proj.matching_percentage >= 40 %}badge-partial{% else %}badge-low{% endif %}">
+                {{ proj.matching_percentage }}% Match &bull; {{ proj.match_rating }}
+              </span>
             {% endif %}
+          </div>
 
-            <!-- Team Capacity & Confirmed Members -->
-            <div style="margin-bottom: 14px; padding: 10px 12px; background: var(--color-bg); border-radius: var(--radius-md); font-size: 12px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span>Team Capacity:</span>
-                <strong>{{ proj.member_count }} / {{ proj.max_members }} Members</strong>
-              </div>
-              {% if proj.members %}
-                <div style="font-size: 11px; color: var(--color-text-secondary);">
-                  Confirmed: {% for m in proj.members %}<span>{{ m.name }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
-                </div>
-              {% endif %}
+          <!-- 2. Project title -->
+          <h3 class="explore-card-title">
+            <a href="{{ url_for('view_project_details', project_id=proj.id) }}">
+              {{ proj.title }}
+            </a>
+          </h3>
+
+          <!-- 3. Project description -->
+          <p class="explore-card-description">
+            {{ proj.description }}
+          </p>
+
+          <!-- 4. Required Technical Skills heading and skill badges -->
+          <div class="explore-card-skills">
+            <div class="explore-section-label">
+              Required Technical Skills:
+            </div>
+            <div class="skills-container explore-skills-wrap">
+              {% for sk in proj.required_skills %}
+                <span class="skill-pill {% if sk|lower in proj.matched_skills|map('lower') %}skill-matched{% endif %}">
+                  {{ sk }}
+                </span>
+              {% else %}
+                <span style="font-size: 12px; color: var(--color-text-secondary);">General Skills</span>
+              {% endfor %}
             </div>
           </div>
 
-          <!-- Bottom Action Bar -->
-          <div style="padding-top: 14px; border-top: 1px solid var(--color-border);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <div style="font-size: 12px; color: var(--color-text-secondary);">
+          <!-- 5. Missing Skills information & matching breakdown -->
+          <div class="explore-card-breakdown">
+            {% if proj.required_skills %}
+              {% if proj.matched_skills %}
+                <div class="explore-match-row">
+                  <span class="explore-match-check">&check; Matching:</span>
+                  <span class="explore-match-text">{{ proj.matched_skills|join(', ') }}</span>
+                </div>
+              {% endif %}
+              {% if proj.missing_skills %}
+                <div class="explore-miss-row">
+                  <span class="explore-miss-cross">&times; Missing:</span>
+                  <span class="explore-miss-text">{{ proj.missing_skills|join(', ') }}</span>
+                </div>
+              {% elif not proj.missing_skills and proj.matched_skills %}
+                <div class="explore-match-row" style="color: var(--color-success); font-weight: 600;">
+                  <span>&check; 100% Match &bull; All required skills present</span>
+                </div>
+              {% endif %}
+            {% else %}
+              <div style="font-size: 11px; color: var(--color-text-secondary); font-style: italic;">
+                No specific skills requirements specified
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- 6. Team Capacity and Confirmed Members information -->
+          <div class="explore-card-capacity">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span>Team Capacity:</span>
+              <strong>{{ proj.member_count }} / {{ proj.max_members }} Members</strong>
+            </div>
+            <div class="explore-capacity-confirmed">
+              Confirmed: {% if proj.members %}{% for m in proj.members %}<span>{{ m.name }}</span>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span style="font-style: italic;">None yet (Open for applicants)</span>{% endif %}
+            </div>
+          </div>
+
+          <!-- 7. Divider, 8. Owner Row, 9. Action Buttons -->
+          <div class="explore-card-footer">
+            <!-- 8. Owner name and Team Full indicator -->
+            <div class="explore-card-owner-row">
+              <div class="explore-owner-name">
                 Owner: <a href="{{ url_for('view_student_profile', user_id=proj.owner_id, from_project=proj.id) }}" style="color: var(--color-primary); text-decoration: none;"><strong>{{ proj.owner_name }}</strong></a>
               </div>
 
-              <div>
+              <div class="explore-owner-badge">
                 {% if proj.is_owner %}
                   <span class="badge badge-primary">Your Project</span>
                 {% elif proj.is_member %}
@@ -149,13 +156,13 @@
               </div>
             </div>
 
-            <!-- View Project Action & Apply Button -->
-            <div style="display: flex; gap: 8px;">
-              <a href="{{ url_for('view_project_details', project_id=proj.id) }}" class="btn btn-outline btn-sm" style="flex: 1; text-align: center;">
+            <!-- 9. Action buttons -->
+            <div class="explore-actions-row">
+              <a href="{{ url_for('view_project_details', project_id=proj.id) }}" class="btn btn-outline btn-sm explore-btn">
                 View Project &rarr;
               </a>
               {% if not proj.is_owner and not proj.is_member and not proj.is_full and not proj.has_pending_application %}
-                <button type="button" class="btn btn-primary btn-sm" onclick="toggleApplyForm('apply-form-{{ proj.id }}')">
+                <button type="button" class="btn btn-primary btn-sm explore-btn" onclick="toggleApplyForm('apply-form-{{ proj.id }}')">
                   Apply to Join
                 </button>
               {% endif %}
