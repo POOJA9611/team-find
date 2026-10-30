@@ -2847,26 +2847,56 @@ def admin_dashboard():
     total_students = approved_count
     total_projects = get_count("SELECT COUNT(*) as count FROM projects")
     open_projects = get_count("SELECT COUNT(*) as count FROM projects WHERE status = 'open'")
-    # Workspace tasks across actual student project workspaces
-    total_tasks = get_count(
-        """SELECT COUNT(*) as count
-           FROM tasks t
-           JOIN projects p ON t.project_id = p.id"""
-    )
-    completed_tasks = get_count(
-        """SELECT COUNT(*) as count
-           FROM tasks t
-           JOIN projects p ON t.project_id = p.id
-           WHERE LOWER(t.status) = 'completed'"""
-    )
 
     stats = {
         "total_students": total_students,
         "pending_requests": pending_count,
         "total_projects": total_projects,
-        "open_projects": open_projects,
-        "total_tasks": total_tasks,
-        "completed_tasks": completed_tasks
+        "open_projects": open_projects
+    }
+
+    # Student-Created Projects Overview Query & Filtering
+    project_search = request.args.get("project_search", "").strip()
+    project_status = request.args.get("project_status", "all").strip().lower()
+    if project_status not in ("all", "open", "closed"):
+        project_status = "all"
+
+    projects_sql = """
+        SELECT p.id, p.title, p.description, p.domain, p.status, p.created_at,
+               u.id as student_id, u.email as student_email, u.register_number,
+               sp.name as creator_name, sp.department as creator_department, sp.semester as creator_semester
+        FROM projects p
+        JOIN users u ON p.owner_id = u.id
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE 1=1
+    """
+    proj_params = []
+    if project_status in ("open", "closed"):
+        projects_sql += " AND p.status = %s"
+        proj_params.append(project_status)
+
+    if project_search:
+        projects_sql += " AND (LOWER(p.title) LIKE %s OR LOWER(COALESCE(sp.name, '')) LIKE %s OR LOWER(COALESCE(u.email, '')) LIKE %s OR LOWER(COALESCE(p.domain, '')) LIKE %s OR LOWER(COALESCE(sp.department, '')) LIKE %s)"
+        s_pat = f"%{project_search.lower()}%"
+        proj_params.extend([s_pat, s_pat, s_pat, s_pat, s_pat])
+
+    projects_sql += " ORDER BY p.created_at DESC"
+    student_projects = db.query_all(projects_sql, tuple(proj_params) if proj_params else None)
+
+    for proj in student_projects:
+        skills_rows = db.query_all(
+            "SELECT skill_name FROM project_required_skills WHERE project_id = %s ORDER BY skill_name ASC",
+            (proj["id"],)
+        )
+        proj["technologies"] = [s["skill_name"] for s in skills_rows]
+
+    total_student_projects = get_count("SELECT COUNT(*) as count FROM projects")
+    open_projects_count = get_count("SELECT COUNT(*) as count FROM projects WHERE status = 'open'")
+    closed_projects_count = get_count("SELECT COUNT(*) as count FROM projects WHERE status = 'closed'")
+    project_counts = {
+        "all": total_student_projects,
+        "open": open_projects_count,
+        "closed": closed_projects_count
     }
 
     return render_template(
@@ -2876,7 +2906,12 @@ def admin_dashboard():
         requests_list=requests_list,
         status_filter=status_filter,
         counts=counts,
-        stats=stats
+        stats=stats,
+        student_projects=student_projects,
+        total_student_projects=total_student_projects,
+        project_counts=project_counts,
+        project_search=project_search,
+        project_status=project_status
     )
 
 @app.route("/admin/accounts/<int:user_id>/decide", methods=["POST"])
