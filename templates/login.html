@@ -4,7 +4,18 @@
 
 {% block content %}
 <div style="max-width: 440px; margin: 40px auto 0 auto;">
-  <div class="card">
+  <div class="card" style="position: relative; padding: 32px 28px;">
+    <!-- Discreet Admin Access Icon -->
+    <a href="{{ url_for('admin_login') }}"
+       aria-label="Portal Entry"
+       style="position: absolute; top: 18px; right: 18px; color: var(--color-text-secondary); opacity: 0.35; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; text-decoration: none; border-radius: 4px; transition: opacity 0.2s ease;"
+       onmouseover="this.style.opacity='0.65';"
+       onmouseout="this.style.opacity='0.35';">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+      </svg>
+    </a>
+
     <div style="text-align: center; margin-bottom: 24px;">
       <h1>Sign In to Portal</h1>
       <p class="subtitle">Access your projects, teammates, and originality checks</p>
@@ -41,28 +52,6 @@
         Request an Account
       </a>
     </div>
-
-    <!-- Quick Demo Logins Helper for instant testing -->
-    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--color-border);">
-      <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 8px; text-align: center;">
-        Quick 1-Click Demo Credentials
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn btn-outline btn-sm" style="flex: 1;" onclick="fillLogin('admin@college.edu', 'AdminSecure@2026')">
-          Admin Demo
-        </button>
-        <button type="button" class="btn btn-outline btn-sm" style="flex: 1;" onclick="fillLogin('alex.chen@student.edu', 'Password@123')">
-          Student Demo
-        </button>
-      </div>
-    </div>
   </div>
 </div>
-
-<script>
-  function fillLogin(em, pw) {
-    document.getElementById('email').value = em;
-    document.getElementById('password').value = pw;
-  }
-</script>
 {% endblock %}
