@@ -74,18 +74,24 @@
       </div>
     </div>
 
+    <!-- Manual Verification Notice -->
+    <div style="background: #f8fafc; border: 1px solid var(--color-border); border-left: 4px solid var(--color-primary); padding: 12px 16px; border-radius: var(--radius-md); font-size: 13px; color: var(--color-text-main); margin-bottom: 16px;">
+      <strong>Manual Verification Required:</strong> Admins must physically inspect the student's College ID Card or official departmental enrollment record before approving an account request. This portal does not connect to automated college identity registries. If verification is incomplete or proof is missing, keep the request as <em>Pending</em>.
+    </div>
+
     <!-- Requests Table for Selected Filter -->
     {% if requests_list %}
       <div class="table-responsive">
         <table class="table">
           <thead>
             <tr>
-              <th>Student</th>
+              <th>Student Name & Email</th>
+              <th>College Register No.</th>
               <th>Department</th>
-              <th>Semester / Section</th>
-              <th>Status</th>
-              <th>Submitted / Decided</th>
-              <th style="text-align: right;">Action</th>
+              <th>Semester & Section</th>
+              <th>Verification Status</th>
+              <th>Registration Date</th>
+              <th style="text-align: right;">Manual Action</th>
             </tr>
           </thead>
           <tbody>
@@ -94,6 +100,15 @@
                 <td>
                   <strong>{{ req.name }}</strong>
                   <div style="font-size: 11px; color: var(--color-text-secondary);">{{ req.email }}</div>
+                </td>
+                <td>
+                  {% if req.register_number %}
+                    <span style="font-family: monospace; font-size: 12px; font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 3px 8px; border-radius: 4px; border: 1px solid #bae6fd;">
+                      {{ req.register_number }}
+                    </span>
+                  {% else %}
+                    <span style="font-size: 12px; color: var(--color-text-secondary); font-style: italic;">Not Recorded</span>
+                  {% endif %}
                 </td>
                 <td>{{ req.department }}</td>
                 <td>Semester {{ req.semester }} {% if req.section %}&bull; {{ req.section }}{% endif %}</td>
@@ -171,6 +186,7 @@
           <thead>
             <tr>
               <th>Name & Email</th>
+              <th>College Register No.</th>
               <th>Department</th>
               <th>Semester</th>
               <th>Skills Count</th>
@@ -184,6 +200,15 @@
                 <td>
                   <strong>{{ s.name }}</strong>
                   <div style="font-size: 11px; color: var(--color-text-secondary);">{{ s.email }}</div>
+                </td>
+                <td>
+                  {% if s.register_number %}
+                    <span style="font-family: monospace; font-size: 12px; font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 7px; border-radius: 4px; border: 1px solid #bae6fd;">
+                      {{ s.register_number }}
+                    </span>
+                  {% else %}
+                    <span style="font-size: 11px; color: var(--color-text-secondary); font-style: italic;">Not Recorded</span>
+                  {% endif %}
                 </td>
                 <td>{{ s.department }}</td>
                 <td>Semester {{ s.semester }} {% if s.section %}&bull; {{ s.section }}{% endif %}</td>
