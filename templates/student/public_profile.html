@@ -78,6 +78,132 @@
     </div>
   {% endif %}
 
+  <!-- Published Team Projects & Portfolio -->
+  <div class="card" style="padding: 24px;">
+    <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+      <div>
+        <h2 style="margin: 0 0 4px 0; font-size: 18px;">Published Team Projects & Portfolio ({{ published_projects|length }})</h2>
+        <p class="subtitle" style="margin-bottom: 0;">
+          Finalized team projects where {{ profile.name }} has served as a designated collaborator.
+        </p>
+      </div>
+      <div>
+        <span class="badge badge-success" style="font-size: 12px; padding: 6px 12px;">
+          &#x2714; Verified Published Work
+        </span>
+      </div>
+    </div>
+
+    {% if published_projects %}
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        {% for p in published_projects %}
+          <div style="border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 20px; background: var(--color-bg);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+                  <span class="badge badge-primary">{{ p.domain }}</span>
+                  <span class="badge badge-success">&#x2714; Published</span>
+                  {% if p.published_at %}
+                    <span style="font-size: 11px; color: var(--color-text-secondary);">Published on {{ p.published_at }}</span>
+                  {% endif %}
+                </div>
+                <h3 style="margin: 0; font-size: 17px; color: var(--color-text-main);">{{ p.title }}</h3>
+              </div>
+
+              <!-- Member Role Badge -->
+              <div style="text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase;">Assigned Role</div>
+                <span class="badge badge-primary" style="font-size: 13px; font-weight: 700; padding: 4px 10px;">
+                  {{ p.member_role }}
+                </span>
+              </div>
+            </div>
+
+            <p style="color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; margin: 0 0 14px 0;">
+              {{ p.description }}
+            </p>
+
+            {% if p.required_skills %}
+              <div style="margin-bottom: 14px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-right: 6px;">
+                  Tech Stack:
+                </span>
+                <div class="skills-container" style="display: inline-flex;">
+                  {% for sk in p.required_skills %}
+                    <span class="skill-pill">{{ sk }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            <!-- Team Members Roster -->
+            <div style="margin-bottom: 14px; background: #fff; padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 8px;">
+                Team Roster & Roles ({{ p.team|length }} Members):
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                {% for tm in p.team %}
+                  <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 12px;">
+                    <strong>{{ tm.name }}</strong>
+                    <span style="color: var(--color-text-secondary);">&bull;</span>
+                    <span style="color: var(--color-primary); font-weight: 600;">{{ tm.role }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Tasks Assigned to this Student -->
+            <div style="background: #fff; padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); margin-bottom: 14px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 8px;">
+                Deliverables Assigned to {{ profile.name }} ({{ p.assigned_tasks|length }}):
+              </div>
+
+              {% if p.assigned_tasks %}
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  {% for tk in p.assigned_tasks %}
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;">
+                      <div>
+                        <strong>{{ tk.title }}</strong>
+                        {% if tk.description %}
+                          <span style="color: var(--color-text-secondary); margin-left: 6px;">&bull; {{ tk.description }}</span>
+                        {% endif %}
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        {% if tk.deadline %}
+                          <span style="font-size: 11px; color: var(--color-text-secondary);">Due: {{ tk.deadline }}</span>
+                        {% endif %}
+                        <span class="badge {% if tk.priority == 'high' %}badge-danger{% elif tk.priority == 'low' %}badge-gray{% else %}badge-warning{% endif %}" style="font-size: 11px;">
+                          {{ tk.priority|capitalize }}
+                        </span>
+                        <span class="badge {% if tk.status == 'completed' %}badge-success{% else %}badge-primary{% endif %}" style="font-size: 11px;">
+                          {{ tk.status|replace('_', ' ')|capitalize }}
+                        </span>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div style="font-size: 12px; color: var(--color-text-secondary);">
+                  No specific tasks currently recorded for this collaborator.
+                </div>
+              {% endif %}
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+              <a href="{{ url_for('view_project_details', project_id=p.id) }}" class="btn btn-outline btn-sm">
+                View Project Details &rarr;
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding: 20px;">
+        <p>No finalized team projects published yet for this student.</p>
+      </div>
+    {% endif %}
+  </div>
+
   <!-- Projects Led / Academic Portfolio -->
   <div class="card" style="padding: 24px;">
     <div class="section-title">
