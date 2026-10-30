@@ -13,12 +13,14 @@ USE student_project_finder;
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
+    register_number VARCHAR(100) UNIQUE DEFAULT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('student', 'admin') NOT NULL DEFAULT 'student',
     status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_email (email),
+    INDEX idx_user_register_number (register_number),
     INDEX idx_user_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -57,10 +59,13 @@ CREATE TABLE IF NOT EXISTS projects (
     domain VARCHAR(100) NOT NULL,
     max_members INT NOT NULL DEFAULT 4,
     status ENUM('open', 'closed') NOT NULL DEFAULT 'open',
+    is_published BOOLEAN NOT NULL DEFAULT FALSE,
+    published_at DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_project_status (status),
     INDEX idx_project_domain (domain),
+    INDEX idx_project_published (is_published),
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -79,7 +84,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
     student_id INT NOT NULL,
-    role ENUM('owner', 'member') NOT NULL DEFAULT 'member',
+    role VARCHAR(100) NOT NULL DEFAULT 'Member',
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_project_member (project_id, student_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -121,11 +126,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     assigned_to INT NULL,
     status ENUM('to_do', 'in_progress', 'completed') NOT NULL DEFAULT 'to_do',
+    priority ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
+    deadline DATE NULL,
     created_by INT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_task_project (project_id),
     INDEX idx_task_assigned (assigned_to),
+    INDEX idx_task_priority (priority),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
