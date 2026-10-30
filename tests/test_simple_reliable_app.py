@@ -530,12 +530,26 @@ class TestSimpleReliableApp(unittest.TestCase):
         self.assertIn("Alex Chen", content)
         self.assertIn("Maya Patel", content)
 
-        # Verify Workspace Tasks statistics card
-        self.assertIn("Workspace Tasks", content)
-        db_total_tasks = db.query_one("SELECT COUNT(*) as count FROM tasks t JOIN projects p ON t.project_id = p.id")["count"]
-        db_completed_tasks = db.query_one("SELECT COUNT(*) as count FROM tasks t JOIN projects p ON t.project_id = p.id WHERE LOWER(t.status) = 'completed'")["count"]
-        self.assertIn(f">{db_total_tasks}<", content)
-        self.assertIn(f"{db_completed_tasks} Tasks Completed", content)
+        # Verify Workspace Tasks statistics card is removed
+        self.assertNotIn("Workspace Tasks", content)
+
+        # Verify Student-Created Projects Overview section
+        self.assertIn("Student-Created Projects Overview", content)
+        self.assertIn("Student Creator", content)
+        self.assertIn("AI Resume Screening", content)
+        self.assertIn("Smart Campus Event Navigator", content)
+        self.assertIn("alex@student.edu", content)
+
+        # Verify search filter on student projects overview
+        search_res = self.client.get("/admin/dashboard?project_search=Resume")
+        search_content = search_res.get_data(as_text=True)
+        self.assertIn("AI Resume Screening", search_content)
+
+        # Verify status filter on student projects overview
+        status_res = self.client.get("/admin/dashboard?project_status=open")
+        status_content = status_res.get_data(as_text=True)
+        self.assertIn("Student-Created Projects Overview", status_content)
+        self.assertIn("Open", status_content)
 
     # -------------------------------------------------------------
     # 11. Student Applications to Join Existing Projects
